@@ -2,8 +2,45 @@ import { useState, useEffect } from 'react'
 import {
   getMonthTransactions, getAccumulatedBalance,
   calcTotals, calcRealized, fmt,
-  CATS_EXP, CATS_INC, MONTHS_FULL
+  CATS_EXP, CATS_INC, MONTHS_FULL, supabase
 } from '../store/supabase.js'
+
+function SaldoInicialModal({ current, onClose, onSave }) {
+  const [value, setValue] = useState(current ? String(current) : '')
+  const [loading, setLoading] = useState(false)
+
+  async function handleSave() {
+    const val = parseFloat(value)
+    if (isNaN(val)) return
+    setLoading(true)
+    await onSave(val)
+    setLoading(false)
+    onClose()
+  }
+
+  return (
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">
+          Saldo inicial
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
+          Informe quanto você tinha na conta antes de começar a usar o Kronava. Este valor será somado ao saldo acumulado.
+        </p>
+        <div className="form-group">
+          <label className="form-label">Valor (R$)</label>
+          <input className="form-input" type="number" placeholder="0,00"
+            step="0.01" inputMode="decimal"
+            value={value} onChange={e => setValue(e.target.value)} />
+        </div>
+        <button className="submit-btn" onClick={handleSave} disabled={loading}>
+          {loading ? 'Salvando...' : 'Salvar saldo inicial'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function TxItem({ tx }) {
   const cats = tx.type === 'income' ? CATS_INC : CATS_EXP
@@ -34,6 +71,12 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
   const [txs, setTxs] = useState([])
   const [accumulated, setAccumulated] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [showSaldoModal, setShowSaldoModal] = useState(false)
+  const [initialBalance, setInitialBalance] = useState(0)
+
+  useEffect(() => {
+    setInitialBalance(parseFloat(profile?.initial_balance || 0))
+  }, [profile])
 
   useEffect(() => {
     async function load() {
@@ -54,9 +97,13 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
     load()
   }, [userId, month, year, refresh])
 
-  const { inc, exp } = calcTotals(txs)
+  async function handleSaveInitialBalance(val) {
+    await supabase.from('profiles').update({ initial_balance: val }).eq('id', userId)
+    setInitialBalance(val)
+  }
+
   const realized = calcRealized(txs)
-  const totalBalance = accumulated + realized.balance
+  const totalBalance = initialBalance + accumulated + realized.balance
   const saving = realized.inc > 0 ? ((realized.inc - realized.exp) / realized.inc * 100) : 0
 
   const topExp = txs
@@ -89,6 +136,20 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
         <div className="balance-sub">
           <span className="balance-inc">↑ {fmt(realized.inc)}</span>
           <span className="balance-exp">↓ {fmt(realized.exp)}</span>
+        </div>
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(124,111,247,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+            {initialBalance > 0
+              ? `Saldo inicial: ${fmt(initialBalance)}`
+              : 'Nenhum saldo inicial definido'}
+          </span>
+          <button onClick={() => setShowSaldoModal(true)} style={{
+            background: 'rgba(124,111,247,0.15)', border: '1px solid rgba(124,111,247,0.3)',
+            borderRadius: 20, padding: '4px 12px', color: 'var(--purple2)',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer'
+          }}>
+            {initialBalance > 0 ? 'Editar' : '+ Definir'}
+          </button>
         </div>
       </div>
 
@@ -148,6 +209,13 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
           }
         </div>
       </div>
+
+      {showSaldoModal && (
+        <SaldoInicialModal
+          current={initialBalance}
+          onClose={() => setShowSaldoModal(false)}
+          onSave={handleSaveInitialBalance} />
+      )}
     </>
   )
 }

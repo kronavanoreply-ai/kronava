@@ -8,6 +8,7 @@ import Charts from './components/Charts.jsx'
 import Planning from './components/Planning.jsx'
 import AddModal from './components/AddModal.jsx'
 import Toast from './components/Toast.jsx'
+import Onboarding from './components/Onboarding.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -19,6 +20,7 @@ export default function App() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [refresh, setRefresh] = useState(0)
   const [toast, setToast] = useState('')
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -40,6 +42,11 @@ export default function App() {
     try {
       const p = await getProfile(userId)
       setProfile(p)
+      // Mostra onboarding se o perfil foi criado há menos de 1 minuto
+      const createdAt = new Date(p.created_at)
+      const now = new Date()
+      const diffMs = now - createdAt
+      if (diffMs < 60000) setShowOnboarding(true)
     } catch (err) {
       console.error(err)
     } finally {
@@ -59,14 +66,11 @@ export default function App() {
     setTimeout(() => setToast(''), 2600)
   }
 
-  function doRefresh() {
-    setRefresh(r => r + 1)
-  }
+  function doRefresh() { setRefresh(r => r + 1) }
 
   async function handleSaveTx(tx) {
     const { error } = await supabase.from('transactions').insert({
-      ...tx,
-      user_id: session.user.id
+      ...tx, user_id: session.user.id
     })
     if (error) throw error
     doRefresh()
@@ -82,16 +86,14 @@ export default function App() {
     )
   }
 
-  if (!session) {
-    return <Auth onAuth={() => {}} />
-  }
+  if (!session) return <Auth onAuth={() => {}} />
+
+  if (showOnboarding) return <Onboarding onFinish={() => setShowOnboarding(false)} />
 
   const sharedProps = {
     userId: session.user.id,
-    profile,
-    month, year,
-    changeMonth,
-    refresh,
+    profile, month, year,
+    changeMonth, refresh,
     onRefresh: doRefresh,
   }
 

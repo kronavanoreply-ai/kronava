@@ -1,8 +1,107 @@
 import { useState, useEffect } from 'react'
-import { getMonthTransactions, calcTotals, calcRealized, fmt, CATS_EXP, CATS_INC, MONTHS_FULL, supabase } from '../store/supabase.js'
+import { getMonthTransactions, calcRealized, fmt, CATS_EXP, CATS_INC, MONTHS_FULL, supabase } from '../store/supabase.js'
 import Confirm from './Confirm.jsx'
 
-function TxItem({ tx, onDelete, onConfirm }) {
+function EditModal({ tx, onClose, onSave }) {
+  const [type, setType] = useState(tx.type)
+  const [status, setStatus] = useState(tx.status)
+  const [amount, setAmount] = useState(String(tx.amount))
+  const [desc, setDesc] = useState(tx.description || '')
+  const [date, setDate] = useState(tx.date_projected)
+  const [cat, setCat] = useState(tx.category)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const cats = type === 'expense' ? CATS_EXP : CATS_INC
+
+  async function handleSave() {
+    const val = parseFloat(amount)
+    if (!amount || val <= 0) { setError('Informe um valor válido'); return }
+    if (!date) { setError('Informe a data'); return }
+    if (!cat) { setError('Selecione uma categoria'); return }
+    setLoading(true)
+    try {
+      await onSave(tx.id, {
+        type, status, amount: val,
+        description: desc.trim(),
+        date_projected: date,
+        date_realized: status === 'realizado' ? date : null,
+        category: cat,
+      })
+    } catch (err) {
+      setError(err.message || 'Erro ao salvar')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">
+          Editar transação
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="type-toggle">
+          <button className={`type-btn ${type === 'expense' ? 'active-exp' : ''}`}
+            onClick={() => { setType('expense'); setCat('') }}>Despesa</button>
+          <button className={`type-btn ${type === 'income' ? 'active-inc' : ''}`}
+            onClick={() => { setType('income'); setCat('') }}>Receita</button>
+        </div>
+
+        <div className="status-toggle">
+          <button className={`status-btn ${status === 'projetado' ? 'active-proj' : ''}`}
+            onClick={() => setStatus('projetado')}>⏳ Projetado</button>
+          <button className={`status-btn ${status === 'realizado' ? 'active-real' : ''}`}
+            onClick={() => setStatus('realizado')}>✅ Realizado</button>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Valor (R$)</label>
+          <input className="form-input" type="number" placeholder="0,00"
+            step="0.01" min="0.01" inputMode="decimal"
+            value={amount}
+            onChange={e => {
+              const val = e.target.value
+              if (val === '' || parseFloat(val) > 0) setAmount(val)
+            }} />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Descrição</label>
+          <input className="form-input" type="text" placeholder="Ex: Supermercado"
+            value={desc} onChange={e => setDesc(e.target.value)} />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Data</label>
+          <input className="form-input" type="date"
+            value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Categoria</label>
+          <div className="cat-grid">
+            {cats.map(c => (
+              <button key={c.id}
+                className={`cat-option ${cat === c.id ? 'selected' : ''}`}
+                onClick={() => { setCat(c.id); setError('') }}>
+                <span>{c.icon}</span>{c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <button className="submit-btn" onClick={handleSave} disabled={loading}>
+          {loading ? 'Salvando...' : 'Salvar alterações'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function TxItem({ tx, onDelete, onConfirm, onEdit }) {
   const cats = tx.type === 'income' ? CATS_INC : CATS_EXP
   const cat = cats.find(c => c.id === tx.category) || { icon: '📦', label: 'Outros', color: '#9ca3af' }
   const d = new Date(tx.date_projected + 'T12:00:00')
@@ -17,7 +116,9 @@ function TxItem({ tx, onDelete, onConfirm }) {
         <div className="tx-cat">{cat.label}</div>
         <div className={`tx-status ${tx.status}`}>
           {isProjected
-            ? <button onClick={() => onConfirm(tx)} style={{ background: 'none', border: 'none', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', padding: 0 }}>⏳ Projetado — toque para confirmar</button>
+            ? <button onClick={() => onConfirm(tx)} style={{ background: 'none', border: 'none', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', padding: 0 }}>
+                ⏳ Projetado — toque para confirmar
+              </button>
             : '✅ Realizado'}
         </div>
       </div>
@@ -27,9 +128,14 @@ function TxItem({ tx, onDelete, onConfirm }) {
         </div>
         <div className="tx-date">{dateStr}</div>
       </div>
-      <button className="tx-delete" onClick={() => onDelete(tx)} aria-label="Remover">
-        <i className="ti ti-trash" />
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <button className="tx-delete" onClick={() => onEdit(tx)} aria-label="Editar">
+          <i className="ti ti-pencil" />
+        </button>
+        <button className="tx-delete" onClick={() => onDelete(tx)} aria-label="Remover">
+          <i className="ti ti-trash" />
+        </button>
+      </div>
     </div>
   )
 }
@@ -39,6 +145,7 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [confirm, setConfirm] = useState({ open: false, tx: null, mode: null })
+  const [editTx, setEditTx] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -55,7 +162,6 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
     load()
   }, [userId, month, year, refresh])
 
-  const { inc, exp } = calcTotals(txs)
   const realized = calcRealized(txs)
   const balance = realized.inc - realized.exp
 
@@ -65,29 +171,29 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
     : txs.filter(t => t.type === filter)
 
   async function handleDelete() {
-    const tx = confirm.tx
     try {
-      await supabase.from('transactions').delete().eq('id', tx.id)
+      await supabase.from('transactions').delete().eq('id', confirm.tx.id)
       onRefresh()
-    } catch (err) {
-      console.error(err)
-    }
+    } catch (err) { console.error(err) }
     setConfirm({ open: false, tx: null, mode: null })
   }
 
   async function handleConfirmProjected() {
-    const tx = confirm.tx
     const today = new Date().toISOString().split('T')[0]
     try {
       await supabase.from('transactions').update({
-        status: 'realizado',
-        date_realized: today
-      }).eq('id', tx.id)
+        status: 'realizado', date_realized: today
+      }).eq('id', confirm.tx.id)
       onRefresh()
-    } catch (err) {
-      console.error(err)
-    }
+    } catch (err) { console.error(err) }
     setConfirm({ open: false, tx: null, mode: null })
+  }
+
+  async function handleEdit(id, data) {
+    const { error } = await supabase.from('transactions').update(data).eq('id', id)
+    if (error) throw error
+    onRefresh()
+    setEditTx(null)
   }
 
   return (
@@ -143,7 +249,8 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
               : filtered.map(t => (
                 <TxItem key={t.id} tx={t}
                   onDelete={tx => setConfirm({ open: true, tx, mode: 'delete' })}
-                  onConfirm={tx => setConfirm({ open: true, tx, mode: 'confirm' })} />
+                  onConfirm={tx => setConfirm({ open: true, tx, mode: 'confirm' })}
+                  onEdit={tx => setEditTx(tx)} />
               ))
           }
         </div>
@@ -158,6 +265,13 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
         onConfirm={confirm.mode === 'delete' ? handleDelete : handleConfirmProjected}
         onCancel={() => setConfirm({ open: false, tx: null, mode: null })}
       />
+
+      {editTx && (
+        <EditModal
+          tx={editTx}
+          onClose={() => setEditTx(null)}
+          onSave={handleEdit} />
+      )}
     </>
   )
 }

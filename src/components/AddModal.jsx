@@ -26,9 +26,7 @@ export default function AddModal({ onClose, onSave }) {
     setLoading(true)
     try {
       await onSave({
-        type,
-        status,
-        amount: val,
+        type, status, amount: val,
         description: desc.trim(),
         date_projected: date,
         date_realized: status === 'realizado' ? date : null,
@@ -66,7 +64,11 @@ export default function AddModal({ onClose, onSave }) {
           <label className="form-label">Valor (R$)</label>
           <input className="form-input" type="number" placeholder="0,00"
             step="0.01" min="0.01" inputMode="decimal"
-            value={amount} onChange={e => setAmount(e.target.value)} />
+            value={amount}
+            onChange={e => {
+              const val = e.target.value
+              if (val === '' || parseFloat(val) > 0) setAmount(val)
+            }} />
         </div>
 
         <div className="form-group">
