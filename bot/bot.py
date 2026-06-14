@@ -29,6 +29,17 @@ CATS_INC = {
     'other': '📦 Outros'
 }
 
+MESES = {
+    'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março',
+    'April': 'Abril', 'May': 'Maio', 'June': 'Junho',
+    'July': 'Julho', 'August': 'Agosto', 'September': 'Setembro',
+    'October': 'Outubro', 'November': 'Novembro', 'December': 'Dezembro'
+}
+
+def mes_ptbr(dt: datetime) -> str:
+    mes_en = dt.strftime('%B')
+    return f"{MESES[mes_en]}/{dt.year}"
+
 def get_user(telegram_id: int):
     res = supabase.rpc('get_user_by_telegram', {'tid': telegram_id}).execute()
     return res.data[0] if res.data else None
@@ -37,7 +48,7 @@ def fmt(value: float) -> str:
     return f"R$ {abs(value):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def parse_with_ai(text: str) -> dict:
-    prompt = f"""Você é um assistente financeiro. Analise a mensagem e extraia as informações de uma transação financeira.
+    prompt = f"""Você é um assistente financeiro brasileiro. Analise a mensagem e extraia as informações de uma transação financeira.
 
 Mensagem: "{text}"
 
@@ -46,18 +57,35 @@ Responda APENAS em JSON válido com esta estrutura:
   "type": "expense" ou "income",
   "amount": número decimal,
   "description": "descrição curta",
-  "category": uma dessas opções para despesa: food, home, transport, health, leisure, personal, travel, other. Para receita: salary, bonus, invest, freelance, other,
+  "category": uma dessas opções exatas,
   "status": "realizado" ou "projetado",
-  "date": "YYYY-MM-DD" (hoje se não especificado)
+  "date": "YYYY-MM-DD"
 }}
+
+Categorias para DESPESA (type=expense):
+- food: alimentação, restaurante, lanche, mercado, supermercado, delivery, café, pizza, almoço, jantar, padaria
+- home: aluguel, condomínio, água, luz, gás, internet, moradia, casa, apartamento, iptu
+- transport: uber, 99, táxi, gasolina, combustível, ônibus, metrô, passagem, carro, estacionamento, pedágio
+- health: médico, farmácia, remédio, dentista, academia, plano de saúde, hospital, exame
+- leisure: cinema, netflix, spotify, jogo, viagem, bar, festa, show, streaming
+- personal: roupa, cabelo, salão, beleza, presente, compra pessoal
+- travel: hotel, passagem aérea, viagem, hospedagem
+- other: qualquer outro gasto não listado acima
+
+Categorias para RECEITA (type=income):
+- salary: salário, pagamento mensal, holerite
+- bonus: bônus, comissão, gratificação, 13º
+- invest: investimento, rendimento, dividendo, juros
+- freelance: freela, freelance, trabalho extra, projeto
+- other: qualquer outra receita
 
 Data de hoje: {datetime.now().strftime('%Y-%m-%d')}
 
 Regras:
-- Se mencionar "vou pagar", "próximo mês", "vai chegar" = projetado
-- Se mencionar "paguei", "gastei", "recebi", "comprei" = realizado
-- Se não especificar = realizado
-- Retorne APENAS o JSON, sem explicações"""
+- "vou pagar", "próximo mês", "vai chegar", "vencerá" = projetado
+- "paguei", "gastei", "recebi", "comprei", "fui" = realizado
+- sem especificar = realizado
+- Retorne APENAS o JSON, sem explicações, sem markdown"""
 
     response = groq.chat.completions.create(
         model='llama-3.1-8b-instant',
@@ -148,7 +176,7 @@ async def cmd_mes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     proj = [t for t in res.data if t['status'] == 'projetado']
 
     await update.message.reply_text(
-        f"📊 *Resumo de {now.strftime('%B/%Y')}*\n\n"
+        f"📊 *Resumo de {mes_ptbr(now)}*\n\n"
         f"✅ Receitas: *{fmt(inc)}*\n"
         f"❌ Despesas: *{fmt(exp)}*\n"
         f"💰 Saldo: *{fmt(inc - exp)}*\n\n"
