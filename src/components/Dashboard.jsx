@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react'
 import {
   getMonthTransactions, getAccumulatedBalance,
-  calcTotals, calcRealized, fmt,
+  calcRealized, fmt,
   CATS_EXP, CATS_INC, MONTHS_FULL, supabase
 } from '../store/supabase.js'
+
+const CAT_INITIALS = {
+  food: 'A', home: 'M', transport: 'T', health: 'S',
+  leisure: 'L', personal: 'P', travel: 'V', other: 'O',
+  salary: 'S', bonus: 'B', invest: 'I', freelance: 'F'
+}
 
 function SaldoInicialModal({ current, onClose, onSave }) {
   const [value, setValue] = useState(current ? String(current) : '')
@@ -25,8 +31,8 @@ function SaldoInicialModal({ current, onClose, onSave }) {
           Saldo inicial
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
-          Informe quanto você tinha na conta antes de começar a usar o Kronava. Este valor será somado ao saldo acumulado.
+        <p style={{ fontSize: 13, color: 'var(--ivory-muted)', marginBottom: 20, lineHeight: 1.7, fontWeight: 300 }}>
+          Informe quanto você tinha na conta antes de começar a usar o Kronava.
         </p>
         <div className="form-group">
           <label className="form-label">Valor (R$)</label>
@@ -44,18 +50,21 @@ function SaldoInicialModal({ current, onClose, onSave }) {
 
 function TxItem({ tx }) {
   const cats = tx.type === 'income' ? CATS_INC : CATS_EXP
-  const cat = cats.find(c => c.id === tx.category) || { icon: '📦', label: 'Outros', color: '#9ca3af' }
+  const cat = cats.find(c => c.id === tx.category) || { label: 'Outros' }
+  const initial = CAT_INITIALS[tx.category] || cat.label[0].toUpperCase()
   const d = new Date(tx.date_projected + 'T12:00:00')
   const dateStr = `${d.getDate()}/${d.getMonth() + 1}`
   const isProjected = tx.status === 'projetado'
 
   return (
     <div className="tx-item">
-      <div className="tx-icon" style={{ background: cat.color + '22' }}>{cat.icon}</div>
+      <div className="tx-icon">{initial}</div>
       <div className="tx-info">
-        <div className="tx-desc">{tx.description || '—'}</div>
+        <div className="tx-desc">{tx.description || cat.label}</div>
         <div className="tx-cat">{cat.label}</div>
-        <div className={`tx-status ${tx.status}`}>{isProjected ? '⏳ Projetado' : '✅ Realizado'}</div>
+        <div className={`tx-status ${tx.status}`}>
+          {isProjected ? 'Projetado' : 'Realizado'}
+        </div>
       </div>
       <div className="tx-right">
         <div className={`tx-amount ${tx.type === 'income' ? 'pos' : 'neg'} ${isProjected ? 'projected' : ''}`}>
@@ -67,7 +76,7 @@ function TxItem({ tx }) {
   )
 }
 
-export default function Dashboard({ userId, profile, month, year, changeMonth, refresh, onAddClick, onViewAll }) {
+export default function Dashboard({ userId, profile, month, year, refresh, onAddClick, onViewAll }) {
   const [txs, setTxs] = useState([])
   const [accumulated, setAccumulated] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -110,7 +119,7 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
     .filter(t => t.type === 'expense' && t.status === 'realizado')
     .sort((a, b) => b.amount - a.amount)[0]
   const topCat = topExp
-    ? (CATS_EXP.find(c => c.id === topExp.category) || { label: 'Outros', icon: '📦' })
+    ? (CATS_EXP.find(c => c.id === topExp.category) || { label: 'Outros' })
     : null
 
   const pending = txs.filter(t => t.status === 'projetado')
@@ -120,35 +129,30 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
     <>
       <div className="header">
         <div>
-          <div className="greeting">Olá, {profile?.name?.split(' ')[0] || 'Ricardo'} 👋</div>
+          <div className="greeting">Olá, {profile?.name?.split(' ')[0] || 'Ricardo'}</div>
           <div className="page-title">{MONTHS_FULL[month]} {year}</div>
         </div>
-        <button className="header-btn" onClick={onAddClick}>
-          <i className="ti ti-plus" />
+        <button className="header-btn" onClick={onAddClick} aria-label="Adicionar transação">
+          <i className="ti ti-plus" style={{ fontSize: 16 }} />
         </button>
       </div>
 
       <div className="balance-card">
         <div className="balance-label">Saldo acumulado</div>
-        <div className="balance-value" style={{ color: totalBalance >= 0 ? 'var(--text)' : 'var(--red)' }}>
+        <div className="balance-value">
           {totalBalance < 0 ? '-' : ''}{fmt(totalBalance)}
         </div>
         <div className="balance-sub">
           <span className="balance-inc">↑ {fmt(realized.inc)}</span>
           <span className="balance-exp">↓ {fmt(realized.exp)}</span>
         </div>
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(124,111,247,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-            {initialBalance > 0
-              ? `Saldo inicial: ${fmt(initialBalance)}`
-              : 'Nenhum saldo inicial definido'}
-          </span>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '0.5px solid rgba(191,167,111,0.1)' }}>
           <button onClick={() => setShowSaldoModal(true)} style={{
-            background: 'rgba(124,111,247,0.15)', border: '1px solid rgba(124,111,247,0.3)',
-            borderRadius: 20, padding: '4px 12px', color: 'var(--purple2)',
-            fontSize: 11, fontWeight: 600, cursor: 'pointer'
+            background: 'none', border: 'none',
+            color: 'var(--ivory-muted)', fontSize: 11,
+            cursor: 'pointer', fontWeight: 300, letterSpacing: '0.3px'
           }}>
-            {initialBalance > 0 ? 'Editar' : '+ Definir'}
+            {initialBalance > 0 ? `Saldo inicial · ${fmt(initialBalance)} · Editar` : '+ Definir saldo inicial'}
           </button>
         </div>
       </div>
@@ -156,17 +160,17 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
       {pending.length > 0 && (
         <div className="proj-banner">
           <div className="proj-row">
-            <span className="proj-label">⏳ A realizar este mês</span>
+            <span className="proj-label">A realizar este mês</span>
             <span className="proj-value" style={{ color: 'var(--amber)' }}>
               {pending.length} lançamento{pending.length > 1 ? 's' : ''}
             </span>
           </div>
           {pending.map(t => {
             const cats = t.type === 'income' ? CATS_INC : CATS_EXP
-            const cat = cats.find(c => c.id === t.category) || { icon: '📦', label: 'Outros' }
+            const cat = cats.find(c => c.id === t.category) || { label: 'Outros' }
             return (
-              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', marginTop: 6 }}>
-                <span>{cat.icon} {t.description || cat.label}</span>
+              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ivory-dim)', marginTop: 8, fontWeight: 300 }}>
+                <span style={{ textTransform: 'capitalize' }}>{t.description || cat.label}</span>
                 <span style={{ fontFamily: 'var(--font-mono)', color: t.type === 'income' ? 'var(--green)' : 'var(--red)' }}>
                   {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
                 </span>
@@ -179,18 +183,16 @@ export default function Dashboard({ userId, profile, month, year, changeMonth, r
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-label">Economia</div>
-          <div className={`stat-value ${realized.balance >= 0 ? 'green' : 'red'}`}>
-            {fmt(Math.abs(realized.balance))}
-          </div>
+          <div className="stat-value">{fmt(Math.abs(realized.balance))}</div>
           <div className={`stat-badge ${saving >= 0 ? 'badge-up' : 'badge-down'}`}>
             {saving.toFixed(0)}% da renda
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Maior despesa</div>
-          <div className="stat-value red">{topExp ? fmt(topExp.amount) : '—'}</div>
+          <div className="stat-value">{topExp ? fmt(topExp.amount) : '—'}</div>
           <div className="stat-badge badge-neutral">
-            {topCat ? `${topCat.icon} ${topCat.label}` : '—'}
+            {topCat ? topCat.label : '—'}
           </div>
         </div>
       </div>

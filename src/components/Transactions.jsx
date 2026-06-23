@@ -50,9 +50,9 @@ function EditModal({ tx, onClose, onSave }) {
 
         <div className="status-toggle">
           <button className={`status-btn ${status === 'projetado' ? 'active-proj' : ''}`}
-            onClick={() => setStatus('projetado')}>⏳ Projetado</button>
+            onClick={() => setStatus('projetado')}>Projetado</button>
           <button className={`status-btn ${status === 'realizado' ? 'active-real' : ''}`}
-            onClick={() => setStatus('realizado')}>✅ Realizado</button>
+            onClick={() => setStatus('realizado')}>Realizado</button>
         </div>
 
         <div className="form-group">
@@ -85,7 +85,7 @@ function EditModal({ tx, onClose, onSave }) {
               <button key={c.id}
                 className={`cat-option ${cat === c.id ? 'selected' : ''}`}
                 onClick={() => { setCat(c.id); setError('') }}>
-                <span>{c.icon}</span>{c.label}
+                {c.label}
               </button>
             ))}
           </div>
@@ -103,23 +103,24 @@ function EditModal({ tx, onClose, onSave }) {
 
 function TxItem({ tx, onDelete, onConfirm, onEdit }) {
   const cats = tx.type === 'income' ? CATS_INC : CATS_EXP
-  const cat = cats.find(c => c.id === tx.category) || { icon: '📦', label: 'Outros', color: '#9ca3af' }
+  const cat = cats.find(c => c.id === tx.category) || { label: 'Outros' }
+  const initial = cat.label.charAt(0).toUpperCase()
   const d = new Date(tx.date_projected + 'T12:00:00')
   const dateStr = `${d.getDate()}/${d.getMonth() + 1}`
   const isProjected = tx.status === 'projetado'
 
   return (
     <div className="tx-item">
-      <div className="tx-icon" style={{ background: cat.color + '22' }}>{cat.icon}</div>
+      <div className="tx-icon">{initial}</div>
       <div className="tx-info">
         <div className="tx-desc">{tx.description || '—'}</div>
         <div className="tx-cat">{cat.label}</div>
         <div className={`tx-status ${tx.status}`}>
           {isProjected
-            ? <button onClick={() => onConfirm(tx)} style={{ background: 'none', border: 'none', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', padding: 0 }}>
-                ⏳ Projetado — toque para confirmar
+            ? <button onClick={() => onConfirm(tx)} style={{ background: 'none', border: 'none', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.05em' }}>
+                Projetado — toque para confirmar
               </button>
-            : '✅ Realizado'}
+            : 'Realizado'}
         </div>
       </div>
       <div className="tx-right">
@@ -196,6 +197,14 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
     setEditTx(null)
   }
 
+  const filters = [
+    ['all', 'Todas'],
+    ['expense', 'Despesas'],
+    ['income', 'Receitas'],
+    ['projetado', 'Projetadas'],
+    ['realizado', 'Realizadas'],
+  ]
+
   return (
     <>
       <div className="header">
@@ -215,29 +224,31 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
         <div className="summary-cards">
           <div className="summary-card">
             <div className="summary-card-label">Receitas</div>
-            <div className="summary-card-value" style={{ color: 'var(--green)' }}>{fmt(realized.inc)}</div>
+            <div className="summary-card-value">{fmt(realized.inc)}</div>
+            <div className="summary-card-indicator moss" />
           </div>
           <div className="summary-card">
             <div className="summary-card-label">Despesas</div>
-            <div className="summary-card-value" style={{ color: 'var(--red)' }}>{fmt(realized.exp)}</div>
+            <div className="summary-card-value">{fmt(realized.exp)}</div>
+            <div className="summary-card-indicator maroon" />
           </div>
           <div className="summary-card">
             <div className="summary-card-label">Saldo</div>
-            <div className="summary-card-value" style={{ color: balance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(balance)}</div>
+            <div className="summary-card-value">{fmt(balance)}</div>
+            <div className={`summary-card-indicator ${balance >= 0 ? 'moss' : 'maroon'}`} />
           </div>
         </div>
       </div>
 
       <div className="section">
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-          {[['all','Todas'],['expense','Despesas'],['income','Receitas'],['projetado','Projetadas'],['realizado','Realizadas']].map(([v, l]) => (
-            <button key={v} onClick={() => setFilter(v)} style={{
-              padding: '5px 12px', borderRadius: 30, border: '1px solid',
-              borderColor: filter === v ? 'var(--purple)' : 'var(--border)',
-              background: filter === v ? 'rgba(124,111,247,0.15)' : 'var(--bg2)',
-              color: filter === v ? 'var(--purple3)' : 'var(--text3)',
-              fontSize: 11, fontWeight: 500
-            }}>{l}</button>
+        <div className="tx-filters">
+          {filters.map(([v, l]) => (
+            <button
+              key={v}
+              onClick={() => setFilter(v)}
+              className={`tx-filter-btn ${filter === v ? 'active' : ''}`}>
+              {l}
+            </button>
           ))}
         </div>
 

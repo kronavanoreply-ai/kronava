@@ -55,9 +55,9 @@ export default function AddModal({ onClose, onSave }) {
 
         <div className="status-toggle">
           <button className={`status-btn ${status === 'projetado' ? 'active-proj' : ''}`}
-            onClick={() => setStatus('projetado')}>⏳ Projetado</button>
+            onClick={() => setStatus('projetado')}>Projetado</button>
           <button className={`status-btn ${status === 'realizado' ? 'active-real' : ''}`}
-            onClick={() => setStatus('realizado')}>✅ Realizado</button>
+            onClick={() => setStatus('realizado')}>Realizado</button>
         </div>
 
         <div className="form-group">
@@ -92,7 +92,7 @@ export default function AddModal({ onClose, onSave }) {
               <button key={c.id}
                 className={`cat-option ${cat === c.id ? 'selected' : ''}`}
                 onClick={() => { setCat(c.id); setError('') }}>
-                <span>{c.icon}</span>{c.label}
+                {c.label}
               </button>
             ))}
           </div>
