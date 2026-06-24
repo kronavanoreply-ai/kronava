@@ -8,7 +8,6 @@ import Charts from './components/Charts.jsx'
 import Planning from './components/Planning.jsx'
 import AddModal from './components/AddModal.jsx'
 import Toast from './components/Toast.jsx'
-import Onboarding from './components/Onboarding.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -20,7 +19,7 @@ export default function App() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [refresh, setRefresh] = useState(0)
   const [toast, setToast] = useState('')
-  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -42,11 +41,10 @@ export default function App() {
     try {
       const p = await getProfile(userId)
       setProfile(p)
-      // Mostra onboarding se o perfil foi criado há menos de 1 minuto
       const createdAt = new Date(p.created_at)
       const now = new Date()
       const diffMs = now - createdAt
-      if (diffMs < 60000) setShowOnboarding(true)
+      if (diffMs < 60000) setShowWelcome(true)
     } catch (err) {
       console.error(err)
     } finally {
@@ -80,15 +78,13 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-        <div style={{ color: 'var(--purple2)', fontSize: 24, fontWeight: 700 }}>Kronava</div>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-edge)' }}>
+        <div style={{ color: 'var(--gold)', fontSize: 24, fontWeight: 300, letterSpacing: '-0.5px' }}>Kronava</div>
       </div>
     )
   }
 
   if (!session) return <Auth onAuth={() => {}} />
-
-  if (showOnboarding) return <Onboarding onFinish={() => setShowOnboarding(false)} />
 
   const sharedProps = {
     userId: session.user.id,
@@ -116,10 +112,10 @@ export default function App() {
 
       <nav className="bottom-nav">
         {[
-          { id: 'home',         icon: 'ti-home',     label: 'Início'     },
-          { id: 'transactions', icon: 'ti-list',      label: 'Transações' },
-          { id: 'charts',       icon: 'ti-chart-bar', label: 'Análise'    },
-          { id: 'planning',     icon: 'ti-target',    label: 'Planejar'   },
+          { id: 'home',         icon: 'ti-home',      label: 'Início'     },
+          { id: 'transactions', icon: 'ti-list',       label: 'Transações' },
+          { id: 'charts',       icon: 'ti-chart-bar',  label: 'Análise'    },
+          { id: 'planning',     icon: 'ti-target',     label: 'Planejar'   },
         ].map(nav => (
           <button key={nav.id}
             className={`nav-item ${screen === nav.id ? 'active' : ''}`}
@@ -136,6 +132,22 @@ export default function App() {
         <AddModal
           onClose={() => setShowAdd(false)}
           onSave={handleSaveTx} />
+      )}
+
+      {showWelcome && (
+        <div className="welcome-overlay">
+          <div className="welcome-box">
+            <div className="welcome-title">Sua mente livre.</div>
+            <div className="welcome-text">
+              O Kronava está configurando seu espaço. Para começar a experimentar
+              a tranquilidade do controle automático, insira seu saldo atual
+              clicando em "Definir saldo inicial".
+            </div>
+            <button className="welcome-btn" onClick={() => setShowWelcome(false)}>
+              Entrar no Painel
+            </button>
+          </div>
+        </div>
       )}
 
       <Toast message={toast} />
