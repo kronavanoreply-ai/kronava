@@ -76,12 +76,33 @@ function TxItem({ tx }) {
   )
 }
 
+// Calcula receitas/despesas separando realizado de projetado
+function calcSplit(txs) {
+  let realInc = 0, realExp = 0, projInc = 0, projExp = 0
+  for (const t of txs) {
+    const val = parseFloat(t.amount) || 0
+    if (t.status === 'realizado') {
+      t.type === 'income' ? (realInc += val) : (realExp += val)
+    } else {
+      t.type === 'income' ? (projInc += val) : (projExp += val)
+    }
+  }
+  return {
+    realInc, realExp,
+    realBalance: realInc - realExp,
+    projInc: realInc + projInc,
+    projExp: realExp + projExp,
+    projBalance: (realInc + projInc) - (realExp + projExp)
+  }
+}
+
 export default function Dashboard({ userId, profile, month, year, refresh, onAddClick, onViewAll }) {
   const [txs, setTxs] = useState([])
   const [accumulated, setAccumulated] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showSaldoModal, setShowSaldoModal] = useState(false)
   const [initialBalance, setInitialBalance] = useState(0)
+  const [showProjected, setShowProjected] = useState(false)
 
   useEffect(() => {
     setInitialBalance(parseFloat(profile?.initial_balance || 0))
@@ -111,9 +132,22 @@ export default function Dashboard({ userId, profile, month, year, refresh, onAdd
     setInitialBalance(val)
   }
 
+  const split = calcSplit(txs)
   const realized = calcRealized(txs)
-  const totalBalance = initialBalance + accumulated + realized.balance
-  const saving = realized.inc > 0 ? ((realized.inc - realized.exp) / realized.inc * 100) : 0
+
+  // Saldo realizado: saldo inicial + acumulado meses anteriores + só realizados do mês
+  const saldoRealizado = initialBalance + accumulated + split.realBalance
+
+  // Saldo projetado: saldo inicial + acumulado + realizados + projetados do mês
+  const saldoProjetado = initialBalance + accumulated + split.projBalance
+
+  const activeBalance = showProjected ? saldoProjetado : saldoRealizado
+  const activeInc = showProjected ? split.projInc : split.realInc
+  const activeExp = showProjected ? split.projExp : split.realExp
+
+  const saving = split.realInc > 0
+    ? ((split.realInc - split.realExp) / split.realInc * 100)
+    : 0
 
   const topExp = txs
     .filter(t => t.type === 'expense' && t.status === 'realizado')
@@ -138,14 +172,56 @@ export default function Dashboard({ userId, profile, month, year, refresh, onAdd
       </div>
 
       <div className="balance-card">
-        <div className="balance-label">Saldo acumulado</div>
+        {/* Toggle realizado / projetado */}
+        <div style={{
+          display: 'flex', gap: 4, marginBottom: 14,
+          background: 'rgba(255,255,255,0.04)', borderRadius: 8,
+          padding: 3, width: 'fit-content'
+        }}>
+          {['Realizado', 'Projetado'].map((label, i) => {
+            const active = showProjected === !!i
+            return (
+              <button key={label} onClick={() => setShowProjected(!!i)} style={{
+                background: active ? 'rgba(191,167,111,0.15)' : 'none',
+                border: active ? '0.5px solid rgba(191,167,111,0.35)' : '0.5px solid transparent',
+                borderRadius: 6, color: active ? 'var(--gold)' : 'var(--ivory-muted)',
+                fontSize: 11, fontWeight: active ? 500 : 300,
+                padding: '4px 12px', cursor: 'pointer', letterSpacing: '0.4px',
+                transition: 'all 0.2s'
+              }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="balance-label">
+          Saldo {showProjected ? 'projetado' : 'realizado'}
+        </div>
         <div className="balance-value">
-          {totalBalance < 0 ? '-' : ''}{fmt(totalBalance)}
+          {activeBalance < 0 ? '-' : ''}{fmt(Math.abs(activeBalance))}
         </div>
         <div className="balance-sub">
-          <span className="balance-inc">↑ {fmt(realized.inc)}</span>
-          <span className="balance-exp">↓ {fmt(realized.exp)}</span>
+          <span className="balance-inc">↑ {fmt(activeInc)}</span>
+          <span className="balance-exp">↓ {fmt(activeExp)}</span>
         </div>
+
+        {/* Indicador de diferença entre projetado e realizado */}
+        {!showProjected && pending.length > 0 && (
+          <div style={{
+            marginTop: 10, fontSize: 11, color: 'var(--ivory-muted)',
+            fontWeight: 300, letterSpacing: '0.3px'
+          }}>
+            Projetado ao fim do mês:{' '}
+            <span style={{
+              color: saldoProjetado >= saldoRealizado ? 'var(--green)' : 'var(--red)',
+              fontFamily: 'var(--font-mono)'
+            }}>
+              {saldoProjetado < 0 ? '-' : ''}{fmt(Math.abs(saldoProjetado))}
+            </span>
+          </div>
+        )}
+
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: '0.5px solid rgba(191,167,111,0.1)' }}>
           <button onClick={() => setShowSaldoModal(true)} style={{
             background: 'none', border: 'none',
@@ -169,9 +245,15 @@ export default function Dashboard({ userId, profile, month, year, refresh, onAdd
             const cats = t.type === 'income' ? CATS_INC : CATS_EXP
             const cat = cats.find(c => c.id === t.category) || { label: 'Outros' }
             return (
-              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ivory-dim)', marginTop: 8, fontWeight: 300 }}>
+              <div key={t.id} style={{
+                display: 'flex', justifyContent: 'space-between',
+                fontSize: 12, color: 'var(--ivory-dim)', marginTop: 8, fontWeight: 300
+              }}>
                 <span style={{ textTransform: 'capitalize' }}>{t.description || cat.label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: t.type === 'income' ? 'var(--green)' : 'var(--red)' }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: t.type === 'income' ? 'var(--green)' : 'var(--red)'
+                }}>
                   {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
                 </span>
               </div>
@@ -183,7 +265,7 @@ export default function Dashboard({ userId, profile, month, year, refresh, onAdd
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-label">Economia</div>
-          <div className="stat-value">{fmt(Math.abs(realized.balance))}</div>
+          <div className="stat-value">{fmt(Math.abs(split.realBalance))}</div>
           <div className={`stat-badge ${saving >= 0 ? 'badge-up' : 'badge-down'}`}>
             {saving.toFixed(0)}% da renda
           </div>
