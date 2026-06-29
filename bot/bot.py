@@ -105,6 +105,34 @@ Regras:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
+
+    if context.args and context.args[0].startswith('vincular_'):
+        code = context.args[0].replace('vincular_', '')
+        try:
+            res = supabase.rpc('link_telegram', {
+                'p_code': code,
+                'p_telegram_id': telegram_id
+            }).execute()
+
+            if res.data is True:
+                await update.message.reply_text(
+                    "Conta vinculada com sucesso.\n\n"
+                    "A partir de agora posso registrar seus lançamentos financeiros diretamente por aqui.\n\n"
+                    "Basta digitar naturalmente, como: _'Paguei 120 reais no mercado'_.",
+                    parse_mode='Markdown'
+                )
+            else:
+                await update.message.reply_text(
+                    "Este código de vinculação é inválido ou já expirou.\n\n"
+                    "Volte ao aplicativo e gere um novo código em Configurações."
+                )
+        except Exception as e:
+            print(f"Erro ao vincular: {e}")
+            await update.message.reply_text(
+                "Ocorreu um erro ao tentar vincular sua conta. Tente novamente em instantes."
+            )
+        return
+
     user = get_user(telegram_id)
 
     if not user:
@@ -112,7 +140,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Olá. Bem-vindo ao Kronava.\n\n"
             "Para que eu possa cuidar das suas finanças por aqui, precisamos conectar seu assistente ao seu perfil.\n\n"
             "É simples: acesse o aplicativo, vá em Configurações e vincule seu Telegram.\n"
-            "🔗 kronava.com.br"
+            "kronava.com.br"
         )
         return
 
@@ -127,6 +155,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• /pendentes — Próximos compromissos",
         parse_mode='Markdown'
     )
+
+async def cmd_vincular(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = update.effective_user.id
+
+    if not context.args:
+        await update.message.reply_text(
+            "Para vincular sua conta, envie o código que aparece no aplicativo:\n\n"
+            "_/vincular 123456_",
+            parse_mode='Markdown'
+        )
+        return
+
+    code = context.args[0].strip()
+
+    try:
+        res = supabase.rpc('link_telegram', {
+            'p_code': code,
+            'p_telegram_id': telegram_id
+        }).execute()
+
+        if res.data is True:
+            await update.message.reply_text(
+                "Conta vinculada com sucesso.\n\n"
+                "A partir de agora posso registrar seus lançamentos financeiros diretamente por aqui.\n\n"
+                "Basta digitar naturalmente, como: _'Paguei 120 reais no mercado'_.",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(
+                "Código inválido ou expirado.\n\n"
+                "Volte ao aplicativo e gere um novo código."
+            )
+    except Exception as e:
+        print(f"Erro ao vincular: {e}")
+        await update.message.reply_text(
+            "Ocorreu um erro ao tentar vincular sua conta. Tente novamente em instantes."
+        )
 
 async def cmd_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
@@ -332,6 +397,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start',     start))
+    app.add_handler(CommandHandler('vincular',  cmd_vincular))
     app.add_handler(CommandHandler('saldo',     cmd_saldo))
     app.add_handler(CommandHandler('mes',       cmd_mes))
     app.add_handler(CommandHandler('hoje',      cmd_hoje))
