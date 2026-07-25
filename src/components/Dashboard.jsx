@@ -96,7 +96,10 @@ function calcSplit(txs) {
   }
 }
 
-export default function Dashboard({ userId, profile, month, year, refresh, onAddClick, onViewAll }) {
+export default function Dashboard({
+  userId, profile, month, year, refresh,
+  onAddClick, onViewAll, onPrevMonth, onNextMonth, onLogout
+}) {
   const [txs, setTxs] = useState([])
   const [accumulated, setAccumulated] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -161,14 +164,29 @@ export default function Dashboard({ userId, profile, month, year, refresh, onAdd
 
   return (
     <>
-      <div className="header">
+      <div className="header" style={{ alignItems: 'flex-start' }}>
         <div>
           <div className="greeting">Olá, {profile?.name?.split(' ')[0] || 'Ricardo'}</div>
-          <div className="page-title">{MONTHS_FULL[month]} {year}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
+            <button onClick={onPrevMonth} aria-label="Mês anterior" style={{
+              background: 'none', border: 'none', color: 'var(--gold)',
+              fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1
+            }}>‹</button>
+            <div className="page-title">{MONTHS_FULL[month]} {year}</div>
+            <button onClick={onNextMonth} aria-label="Próximo mês" style={{
+              background: 'none', border: 'none', color: 'var(--gold)',
+              fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1
+            }}>›</button>
+          </div>
         </div>
-        <button className="header-btn" onClick={onAddClick} aria-label="Adicionar transação">
-          <i className="ti ti-plus" style={{ fontSize: 16 }} />
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="header-btn" onClick={onAddClick} aria-label="Adicionar transação">
+            <i className="ti ti-plus" style={{ fontSize: 16 }} />
+          </button>
+          <button className="header-btn" onClick={onLogout} aria-label="Sair da conta" title="Sair">
+            <i className="ti ti-logout" style={{ fontSize: 16 }} />
+          </button>
+        </div>
       </div>
 
       <div className="balance-card">

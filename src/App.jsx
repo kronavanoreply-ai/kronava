@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard.jsx'
 import Transactions from './components/Transactions.jsx'
 import Charts from './components/Charts.jsx'
 import Planning from './components/Planning.jsx'
+import TelegramLink from './components/TelegramLink.jsx'
 import AddModal from './components/AddModal.jsx'
 import Toast from './components/Toast.jsx'
 
@@ -76,6 +77,10 @@ export default function App() {
     showToast('Transação salva ✓')
   }
 
+  async function handleLogout() {
+    await supabase.auth.signOut()
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-edge)' }}>
@@ -98,7 +103,10 @@ export default function App() {
       <div className={`screen ${screen === 'home' ? 'active' : ''}`}>
         <Dashboard {...sharedProps}
           onAddClick={() => setShowAdd(true)}
-          onViewAll={() => setScreen('transactions')} />
+          onViewAll={() => setScreen('transactions')}
+          onPrevMonth={() => changeMonth(-1)}
+          onNextMonth={() => changeMonth(1)}
+          onLogout={handleLogout} />
       </div>
       <div className={`screen ${screen === 'transactions' ? 'active' : ''}`}>
         <Transactions {...sharedProps} onAddClick={() => setShowAdd(true)} />
@@ -109,6 +117,9 @@ export default function App() {
       <div className={`screen ${screen === 'planning' ? 'active' : ''}`}>
         <Planning {...sharedProps} />
       </div>
+      <div className={`screen ${screen === 'telegram' ? 'active' : ''}`}>
+        <TelegramLink userId={session.user.id} />
+      </div>
 
       <nav className="bottom-nav">
         {[
@@ -116,6 +127,7 @@ export default function App() {
           { id: 'transactions', icon: 'ti-list',       label: 'Transações' },
           { id: 'charts',       icon: 'ti-chart-bar',  label: 'Análise'    },
           { id: 'planning',     icon: 'ti-target',     label: 'Planejar'   },
+          { id: 'telegram',     icon: 'ti-brand-telegram', label: 'Telegram' },
         ].map(nav => (
           <button key={nav.id}
             className={`nav-item ${screen === nav.id ? 'active' : ''}`}
