@@ -10,6 +10,8 @@ export default function AddModal({ onClose, onSave }) {
   const [cat, setCat] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [months, setMonths] = useState(12)
 
   const cats = type === 'expense' ? CATS_EXP : CATS_INC
 
@@ -22,15 +24,24 @@ export default function AddModal({ onClose, onSave }) {
     if (!amount || val <= 0) { setError('Informe um valor válido'); return }
     if (!date) { setError('Informe a data'); return }
     if (!cat) { setError('Selecione uma categoria'); return }
+    if (isRecurring && (!months || months < 2 || months > 60)) {
+      setError('Informe entre 2 e 60 meses'); return
+    }
 
     setLoading(true)
     try {
+      const dayOfMonth = new Date(date + 'T00:00:00').getDate()
+
       await onSave({
-        type, status, amount: val,
+        type,
+        status,
+        amount: val,
         description: desc.trim(),
-        date_projected: date,
-        date_realized: status === 'realizado' ? date : null,
+        date,
         category: cat,
+        isRecurring,
+        months: isRecurring ? months : 1,
+        dayOfMonth,
       })
     } catch (err) {
       setError(err.message || 'Erro ao salvar')
@@ -97,6 +108,23 @@ export default function AddModal({ onClose, onSave }) {
             ))}
           </div>
         </div>
+
+        <div className="form-group">
+          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={isRecurring}
+              onChange={e => setIsRecurring(e.target.checked)} />
+            Transação recorrente (mensal)
+          </label>
+        </div>
+
+        {isRecurring && (
+          <div className="form-group">
+            <label className="form-label">Repetir por quantos meses</label>
+            <input className="form-input" type="number" min="2" max="60"
+              value={months}
+              onChange={e => setMonths(parseInt(e.target.value) || 0)} />
+          </div>
+        )}
 
         {error && <div className="error-msg">{error}</div>}
 

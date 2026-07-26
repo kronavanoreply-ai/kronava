@@ -67,14 +67,66 @@ export default function App() {
 
   function doRefresh() { setRefresh(r => r + 1) }
 
+  function addMonths(dateStr, n) {
+    const d = new Date(dateStr + 'T00:00:00')
+    const day = d.getDate()
+    d.setDate(1)
+    d.setMonth(d.getMonth() + n)
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+    d.setDate(Math.min(day, lastDay))
+    return d.toISOString().split('T')[0]
+  }
+
   async function handleSaveTx(tx) {
-    const { error } = await supabase.from('transactions').insert({
-      ...tx, user_id: session.user.id
-    })
+    const userId = session.user.id
+    let ruleId = null
+
+    if (tx.isRecurring) {
+      const { data: rule, error: ruleErr } = await supabase
+        .from('recurring_rules')
+        .insert({
+          user_id: userId,
+          type: tx.type,
+          amount: tx.amount,
+          description: tx.description,
+          category: tx.category,
+          day_of_month: tx.dayOfMonth,
+          active: true,
+          months_count: tx.months,
+        })
+        .select()
+        .single()
+
+      if (ruleErr) throw ruleErr
+      ruleId = rule.id
+    }
+
+    const total = tx.isRecurring ? tx.months : 1
+    const rows = []
+
+    for (let i = 0; i < total; i++) {
+      const occDate = i === 0 ? tx.date : addMonths(tx.date, i)
+      const occStatus = i === 0 ? tx.status : 'projetado'
+      rows.push({
+        user_id: userId,
+        type: tx.type,
+        status: occStatus,
+        amount: tx.amount,
+        description: tx.description,
+        date_projected: occDate,
+        date_realized: occStatus === 'realizado' ? occDate : null,
+        category: tx.category,
+        is_recurring: tx.isRecurring,
+        recurring_rule_id: ruleId,
+      })
+    }
+
+    const { error } = await supabase.from('transactions').insert(rows)
     if (error) throw error
+
     doRefresh()
     setShowAdd(false)
-    showToast('Transação salva ✓')
+    showToast(rows.length > 1 ? `${rows.length} transações salvas ✓` : 'Transação salva ✓')
   }
 
   async function handleLogout() {
