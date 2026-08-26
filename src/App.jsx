@@ -90,6 +90,7 @@ export default function App() {
           amount: tx.amount,
           description: tx.description,
           category: tx.category,
+          subcategory: tx.subcategory,
           day_of_month: tx.dayOfMonth,
           active: true,
           months_count: tx.months,
@@ -116,6 +117,7 @@ export default function App() {
         date_projected: occDate,
         date_realized: occStatus === 'realizado' ? occDate : null,
         category: tx.category,
+        subcategory: tx.subcategory,
         is_recurring: tx.isRecurring,
         recurring_rule_id: ruleId,
       })

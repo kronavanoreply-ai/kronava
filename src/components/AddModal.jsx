@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CATS_EXP, CATS_INC } from '../store/supabase.js'
+import { CATEGORIES, getCategories, getSubcategories } from '../data/categories.js'
 
 export default function AddModal({ onClose, onSave }) {
   const [type, setType] = useState('expense')
@@ -7,23 +7,30 @@ export default function AddModal({ onClose, onSave }) {
   const [amount, setAmount] = useState('')
   const [desc, setDesc] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-  const [cat, setCat] = useState('')
+  const [category, setCategory] = useState('')
+  const [subcategory, setSubcategory] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [months, setMonths] = useState(12)
 
-  const cats = type === 'expense' ? CATS_EXP : CATS_INC
+  const categories = getCategories(type)
+  const subcategories = category ? getSubcategories(type, category) : []
 
   function handleTypeChange(t) {
-    setType(t); setCat(''); setError('')
+    setType(t); setCategory(''); setSubcategory(''); setError('')
+  }
+
+  function handleCategoryChange(c) {
+    setCategory(c); setSubcategory(''); setError('')
   }
 
   async function handleSave() {
     const val = parseFloat(amount)
     if (!amount || val <= 0) { setError('Informe um valor válido'); return }
     if (!date) { setError('Informe a data'); return }
-    if (!cat) { setError('Selecione uma categoria'); return }
+    if (!category) { setError('Selecione uma categoria'); return }
+    if (!subcategory) { setError('Selecione uma subcategoria'); return }
     if (isRecurring && (!months || months < 2 || months > 60)) {
       setError('Informe entre 2 e 60 meses'); return
     }
@@ -38,7 +45,8 @@ export default function AddModal({ onClose, onSave }) {
         amount: val,
         description: desc.trim(),
         date,
-        category: cat,
+        category,
+        subcategory,
         isRecurring,
         months: isRecurring ? months : 1,
         dayOfMonth,
@@ -99,15 +107,30 @@ export default function AddModal({ onClose, onSave }) {
         <div className="form-group">
           <label className="form-label">Categoria</label>
           <div className="cat-grid">
-            {cats.map(c => (
-              <button key={c.id}
-                className={`cat-option ${cat === c.id ? 'selected' : ''}`}
-                onClick={() => { setCat(c.id); setError('') }}>
-                {c.label}
+            {categories.map(c => (
+              <button key={c}
+                className={`cat-option ${category === c ? 'selected' : ''}`}
+                onClick={() => handleCategoryChange(c)}>
+                {c}
               </button>
             ))}
           </div>
         </div>
+
+        {category && (
+          <div className="form-group">
+            <label className="form-label">Subcategoria</label>
+            <div className="cat-grid">
+              {subcategories.map(s => (
+                <button key={s}
+                  className={`cat-option ${subcategory === s ? 'selected' : ''}`}
+                  onClick={() => { setSubcategory(s); setError('') }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="form-group">
           <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>

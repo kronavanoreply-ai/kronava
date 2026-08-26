@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getMonthTransactions, calcRealized, fmt, CATS_EXP, CATS_INC, MONTHS_FULL, supabase } from '../store/supabase.js'
+import { getMonthTransactions, calcRealized, fmt, MONTHS_FULL, supabase } from '../store/supabase.js'
+import { getCategories, getSubcategories } from '../data/categories.js'
 import Confirm from './Confirm.jsx'
 
 function EditModal({ tx, onClose, onSave }) {
@@ -8,16 +9,28 @@ function EditModal({ tx, onClose, onSave }) {
   const [amount, setAmount] = useState(String(tx.amount))
   const [desc, setDesc] = useState(tx.description || '')
   const [date, setDate] = useState(tx.date_projected)
-  const [cat, setCat] = useState(tx.category)
+  const [category, setCategory] = useState(tx.category || '')
+  const [subcategory, setSubcategory] = useState(tx.subcategory || '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const cats = type === 'expense' ? CATS_EXP : CATS_INC
+
+  const categories = getCategories(type)
+  const subcategories = category ? getSubcategories(type, category) : []
+
+  function handleTypeChange(t) {
+    setType(t); setCategory(''); setSubcategory('')
+  }
+
+  function handleCategoryChange(c) {
+    setCategory(c); setSubcategory('')
+  }
 
   async function handleSave() {
     const val = parseFloat(amount)
     if (!amount || val <= 0) { setError('Informe um valor válido'); return }
     if (!date) { setError('Informe a data'); return }
-    if (!cat) { setError('Selecione uma categoria'); return }
+    if (!category) { setError('Selecione uma categoria'); return }
+    if (!subcategory) { setError('Selecione uma subcategoria'); return }
     setLoading(true)
     try {
       await onSave(tx.id, {
@@ -25,7 +38,8 @@ function EditModal({ tx, onClose, onSave }) {
         description: desc.trim(),
         date_projected: date,
         date_realized: status === 'realizado' ? date : null,
-        category: cat,
+        category,
+        subcategory,
       })
     } catch (err) {
       setError(err.message || 'Erro ao salvar')
@@ -43,9 +57,9 @@ function EditModal({ tx, onClose, onSave }) {
 
         <div className="type-toggle">
           <button className={`type-btn ${type === 'expense' ? 'active-exp' : ''}`}
-            onClick={() => { setType('expense'); setCat('') }}>Despesa</button>
+            onClick={() => handleTypeChange('expense')}>Despesa</button>
           <button className={`type-btn ${type === 'income' ? 'active-inc' : ''}`}
-            onClick={() => { setType('income'); setCat('') }}>Receita</button>
+            onClick={() => handleTypeChange('income')}>Receita</button>
         </div>
 
         <div className="status-toggle">
@@ -81,15 +95,30 @@ function EditModal({ tx, onClose, onSave }) {
         <div className="form-group">
           <label className="form-label">Categoria</label>
           <div className="cat-grid">
-            {cats.map(c => (
-              <button key={c.id}
-                className={`cat-option ${cat === c.id ? 'selected' : ''}`}
-                onClick={() => { setCat(c.id); setError('') }}>
-                {c.label}
+            {categories.map(c => (
+              <button key={c}
+                className={`cat-option ${category === c ? 'selected' : ''}`}
+                onClick={() => handleCategoryChange(c)}>
+                {c}
               </button>
             ))}
           </div>
         </div>
+
+        {category && (
+          <div className="form-group">
+            <label className="form-label">Subcategoria</label>
+            <div className="cat-grid">
+              {subcategories.map(s => (
+                <button key={s}
+                  className={`cat-option ${subcategory === s ? 'selected' : ''}`}
+                  onClick={() => { setSubcategory(s); setError('') }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && <div className="error-msg">{error}</div>}
 
@@ -102,9 +131,8 @@ function EditModal({ tx, onClose, onSave }) {
 }
 
 function TxItem({ tx, onDelete, onConfirm, onEdit }) {
-  const cats = tx.type === 'income' ? CATS_INC : CATS_EXP
-  const cat = cats.find(c => c.id === tx.category) || { label: 'Outros' }
-  const initial = cat.label.charAt(0).toUpperCase()
+  const label = tx.category || 'Outros'
+  const initial = label.charAt(0).toUpperCase()
   const d = new Date(tx.date_projected + 'T12:00:00')
   const dateStr = `${d.getDate()}/${d.getMonth() + 1}`
   const isProjected = tx.status === 'projetado'
@@ -114,7 +142,7 @@ function TxItem({ tx, onDelete, onConfirm, onEdit }) {
       <div className="tx-icon">{initial}</div>
       <div className="tx-info">
         <div className="tx-desc">{tx.description || '—'}</div>
-        <div className="tx-cat">{cat.label}</div>
+        <div className="tx-cat">{label}{tx.subcategory ? ` · ${tx.subcategory}` : ''}</div>
         <div className={`tx-status ${tx.status}`}>
           {isProjected
             ? <button onClick={() => onConfirm(tx)} style={{ background: 'none', border: 'none', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.05em' }}>

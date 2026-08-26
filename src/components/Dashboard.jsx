@@ -2,14 +2,8 @@ import { useState, useEffect } from 'react'
 import {
   getMonthTransactions, getAccumulatedBalance,
   calcRealized, fmt,
-  CATS_EXP, CATS_INC, MONTHS_FULL, supabase
+  MONTHS_FULL, supabase
 } from '../store/supabase.js'
-
-const CAT_INITIALS = {
-  food: 'A', home: 'M', transport: 'T', health: 'S',
-  leisure: 'L', personal: 'P', travel: 'V', other: 'O',
-  salary: 'S', bonus: 'B', invest: 'I', freelance: 'F'
-}
 
 function SaldoInicialModal({ current, onClose, onSave }) {
   const [value, setValue] = useState(current ? String(current) : '')
@@ -49,9 +43,8 @@ function SaldoInicialModal({ current, onClose, onSave }) {
 }
 
 function TxItem({ tx }) {
-  const cats = tx.type === 'income' ? CATS_INC : CATS_EXP
-  const cat = cats.find(c => c.id === tx.category) || { label: 'Outros' }
-  const initial = CAT_INITIALS[tx.category] || cat.label[0].toUpperCase()
+  const label = tx.category || 'Outros'
+  const initial = label.charAt(0).toUpperCase()
   const d = new Date(tx.date_projected + 'T12:00:00')
   const dateStr = `${d.getDate()}/${d.getMonth() + 1}`
   const isProjected = tx.status === 'projetado'
@@ -60,8 +53,8 @@ function TxItem({ tx }) {
     <div className="tx-item">
       <div className="tx-icon">{initial}</div>
       <div className="tx-info">
-        <div className="tx-desc">{tx.description || cat.label}</div>
-        <div className="tx-cat">{cat.label}</div>
+        <div className="tx-desc">{tx.description || label}</div>
+        <div className="tx-cat">{label}{tx.subcategory ? ` · ${tx.subcategory}` : ''}</div>
         <div className={`tx-status ${tx.status}`}>
           {isProjected ? 'Projetado' : 'Realizado'}
         </div>
@@ -155,9 +148,7 @@ export default function Dashboard({
   const topExp = txs
     .filter(t => t.type === 'expense' && t.status === 'realizado')
     .sort((a, b) => b.amount - a.amount)[0]
-  const topCat = topExp
-    ? (CATS_EXP.find(c => c.id === topExp.category) || { label: 'Outros' })
-    : null
+  const topCatLabel = topExp ? (topExp.category || 'Outros') : null
 
   const pending = txs.filter(t => t.status === 'projetado')
   const recent = [...txs].slice(0, 5)
@@ -260,14 +251,13 @@ export default function Dashboard({
             </span>
           </div>
           {pending.map(t => {
-            const cats = t.type === 'income' ? CATS_INC : CATS_EXP
-            const cat = cats.find(c => c.id === t.category) || { label: 'Outros' }
+            const label = t.category || 'Outros'
             return (
               <div key={t.id} style={{
                 display: 'flex', justifyContent: 'space-between',
                 fontSize: 12, color: 'var(--ivory-dim)', marginTop: 8, fontWeight: 300
               }}>
-                <span style={{ textTransform: 'capitalize' }}>{t.description || cat.label}</span>
+                <span style={{ textTransform: 'capitalize' }}>{t.description || label}</span>
                 <span style={{
                   fontFamily: 'var(--font-mono)',
                   color: t.type === 'income' ? 'var(--green)' : 'var(--red)'
@@ -292,7 +282,7 @@ export default function Dashboard({
           <div className="stat-label">Maior despesa</div>
           <div className="stat-value">{topExp ? fmt(topExp.amount) : '—'}</div>
           <div className="stat-badge badge-neutral">
-            {topCat ? topCat.label : '—'}
+            {topCatLabel || '—'}
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { getMonthTransactions, calcRealized, fmt, CATS_EXP, MONTHS_SHORT, MONTHS_FULL } from '../store/supabase.js'
+import { getMonthTransactions, calcRealized, fmt, MONTHS_SHORT, MONTHS_FULL } from '../store/supabase.js'
 
 // Cores espelham as variáveis de index.css (--gold, --charcoal, --red).
 // Mantidas em hex aqui porque o Recharts renderiza SVG puro e não lê var(--...) do CSS.
@@ -71,13 +71,15 @@ export default function Charts({ userId, month, year, changeMonth, refresh }) {
 
       const expTxs = cur.filter(t => t.type === 'expense' && t.status === 'realizado')
       const map = {}
-      expTxs.forEach(t => { map[t.category] = (map[t.category] || 0) + parseFloat(t.amount) })
+      expTxs.forEach(t => {
+        const label = t.category || 'Outros'
+        map[label] = (map[label] || 0) + parseFloat(t.amount)
+      })
       const total = Object.values(map).reduce((a, b) => a + b, 0) || 1
       const sorted = Object.entries(map)
         .sort((a, b) => b[1] - a[1]).slice(0, 6)
-        .map(([id, val]) => {
-          const cat = CATS_EXP.find(c => c.id === id) || { label: 'Outros' }
-          return { id, label: cat.label, initial: cat.label.charAt(0), val, pct: Math.round(val / total * 100) }
+        .map(([label, val]) => {
+          return { id: label, label, initial: label.charAt(0).toUpperCase(), val, pct: Math.round(val / total * 100) }
         })
       setCatData(sorted)
     }
