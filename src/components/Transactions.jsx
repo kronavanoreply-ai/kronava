@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { getMonthTransactions, calcRealized, fmt, MONTHS_FULL, supabase } from '../store/supabase.js'
 import { getCategories, getSubcategories } from '../data/categories.js'
 import Confirm from './Confirm.jsx'
@@ -172,6 +172,9 @@ function TxItem({ tx, onDelete, onConfirm, onEdit }) {
 export default function Transactions({ userId, month, year, changeMonth, refresh, onRefresh, onAddClick }) {
   const [txs, setTxs] = useState([])
   const [filter, setFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [confirm, setConfirm] = useState({ open: false, tx: null, mode: null })
   const [editTx, setEditTx] = useState(null)
@@ -194,10 +197,39 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
   const realized = calcRealized(txs)
   const balance = realized.inc - realized.exp
 
-  const filtered = filter === 'all' ? txs
-    : filter === 'projetado' ? txs.filter(t => t.status === 'projetado')
-    : filter === 'realizado' ? txs.filter(t => t.status === 'realizado')
-    : txs.filter(t => t.type === filter)
+  const availableCategories = useMemo(() => {
+    const set = new Set()
+    txs.forEach(t => { if (t.category) set.add(t.category) })
+    return Array.from(set).sort()
+  }, [txs])
+
+  const filtered = useMemo(() => {
+    let result = filter === 'all' ? txs
+      : filter === 'projetado' ? txs.filter(t => t.status === 'projetado')
+      : filter === 'realizado' ? txs.filter(t => t.status === 'realizado')
+      : txs.filter(t => t.type === filter)
+
+    if (categoryFilter !== 'all') {
+      result = result.filter(t => t.category === categoryFilter)
+    }
+
+    if (dateFrom) {
+      result = result.filter(t => t.date_projected >= dateFrom)
+    }
+    if (dateTo) {
+      result = result.filter(t => t.date_projected <= dateTo)
+    }
+
+    return result
+  }, [txs, filter, categoryFilter, dateFrom, dateTo])
+
+  const hasActiveFilters = categoryFilter !== 'all' || dateFrom || dateTo
+
+  function clearAdvancedFilters() {
+    setCategoryFilter('all')
+    setDateFrom('')
+    setDateTo('')
+  }
 
   async function handleDelete() {
     try {
@@ -278,6 +310,47 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
               {l}
             </button>
           ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, marginBottom: 4 }}>
+          <select
+            className="form-input"
+            style={{ flex: '1 1 140px', fontSize: 13, padding: '8px 10px' }}
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}>
+            <option value="all">Todas categorias</option>
+            {availableCategories.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            className="form-input"
+            style={{ flex: '1 1 130px', fontSize: 13, padding: '8px 10px' }}
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            title="Data inicial" />
+
+          <input
+            type="date"
+            className="form-input"
+            style={{ flex: '1 1 130px', fontSize: 13, padding: '8px 10px' }}
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            title="Data final" />
+
+          {hasActiveFilters && (
+            <button
+              onClick={clearAdvancedFilters}
+              style={{
+                background: 'none', border: '1px solid var(--ivory-muted)',
+                borderRadius: 8, color: 'var(--ivory)', fontSize: 12,
+                padding: '8px 12px', cursor: 'pointer', whiteSpace: 'nowrap'
+              }}>
+              Limpar
+            </button>
+          )}
         </div>
 
         <div className="tx-list">
