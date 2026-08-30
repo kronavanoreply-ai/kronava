@@ -4,6 +4,7 @@ import {
   calcRealized, fmt,
   MONTHS_FULL, supabase
 } from '../store/supabase.js'
+import ScoreFinanceiro from './ScoreFinanceiro.jsx'
 
 function SaldoInicialModal({ current, onClose, onSave }) {
   const [value, setValue] = useState(current ? String(current) : '')
@@ -156,6 +157,9 @@ export default function Dashboard({
   // Saldo projetado até a data escolhida: saldo inicial + acumulado + (realizados+projetados até projDate)
   const saldoProjetado = initialBalance + accumulated + splitProj.projBalance
 
+  // Saldo projetado ao fim do mês (independente do seletor) — usado no Score Financeiro
+  const saldoProjetadoFimMes = initialBalance + accumulated + splitAll.projBalance
+
   const activeBalance = showProjected ? saldoProjetado : saldoRealizado
   const activeInc = showProjected ? splitProj.projInc : splitAll.realInc
   const activeExp = showProjected ? splitProj.projExp : splitAll.realExp
@@ -271,10 +275,10 @@ export default function Dashboard({
           }}>
             Projetado ao fim do mês:{' '}
             <span style={{
-              color: saldoProjetado >= saldoRealizado ? 'var(--green)' : 'var(--red)',
+              color: saldoProjetadoFimMes >= saldoRealizado ? 'var(--green)' : 'var(--red)',
               fontFamily: 'var(--font-mono)'
             }}>
-              {saldoProjetado < 0 ? '-' : ''}{fmt(Math.abs(saldoProjetado))}
+              {saldoProjetadoFimMes < 0 ? '-' : ''}{fmt(Math.abs(saldoProjetadoFimMes))}
             </span>
           </div>
         )}
@@ -289,6 +293,11 @@ export default function Dashboard({
           </button>
         </div>
       </div>
+
+      <ScoreFinanceiro
+        saldoRealizado={saldoRealizado}
+        saldoProjetado={saldoProjetadoFimMes}
+      />
 
       {pending.length > 0 && (
         <div className="proj-banner">
@@ -359,3 +368,4 @@ export default function Dashboard({
     </>
   )
 }
+
