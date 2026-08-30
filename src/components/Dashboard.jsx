@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import {
   getMonthTransactions, getAccumulatedBalance,
   calcRealized, fmt,
@@ -23,7 +23,7 @@ function SaldoInicialModal({ current, onClose, onSave }) {
       <div className="modal">
         <div className="modal-title">
           Saldo inicial
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <p style={{ fontSize: 13, color: 'var(--ivory-muted)', marginBottom: 20, lineHeight: 1.7, fontWeight: 300 }}>
           Informe quanto você tinha na conta antes de começar a usar o Kronava.
@@ -89,6 +89,17 @@ function calcSplit(txs) {
   }
 }
 
+function pad2(n) { return String(n).padStart(2, '0') }
+
+function lastDayOfMonth(year, month) {
+  const d = new Date(year, month + 1, 0)
+  return d.getDate()
+}
+
+function toISODate(year, month, day) {
+  return `${year}-${pad2(month + 1)}-${pad2(day)}`
+}
+
 export default function Dashboard({
   userId, profile, month, year, refresh,
   onAddClick, onViewAll, onPrevMonth, onNextMonth, onLogout
@@ -99,10 +110,16 @@ export default function Dashboard({
   const [showSaldoModal, setShowSaldoModal] = useState(false)
   const [initialBalance, setInitialBalance] = useState(0)
   const [showProjected, setShowProjected] = useState(false)
+  const [projDate, setProjDate] = useState(() => toISODate(year, month, lastDayOfMonth(year, month)))
 
   useEffect(() => {
     setInitialBalance(parseFloat(profile?.initial_balance || 0))
   }, [profile])
+
+  // Reseta a data projetada para o último dia sempre que trocar de mês
+  useEffect(() => {
+    setProjDate(toISODate(year, month, lastDayOfMonth(year, month)))
+  }, [month, year])
 
   useEffect(() => {
     async function load() {
@@ -128,21 +145,23 @@ export default function Dashboard({
     setInitialBalance(val)
   }
 
-  const split = calcSplit(txs)
+  const splitAll = calcSplit(txs)
+  const txsUntilProjDate = txs.filter(t => t.date_projected <= projDate)
+  const splitProj = calcSplit(txsUntilProjDate)
   const realized = calcRealized(txs)
 
   // Saldo realizado: saldo inicial + acumulado meses anteriores + só realizados do mês
-  const saldoRealizado = initialBalance + accumulated + split.realBalance
+  const saldoRealizado = initialBalance + accumulated + splitAll.realBalance
 
-  // Saldo projetado: saldo inicial + acumulado + realizados + projetados do mês
-  const saldoProjetado = initialBalance + accumulated + split.projBalance
+  // Saldo projetado até a data escolhida: saldo inicial + acumulado + (realizados+projetados até projDate)
+  const saldoProjetado = initialBalance + accumulated + splitProj.projBalance
 
   const activeBalance = showProjected ? saldoProjetado : saldoRealizado
-  const activeInc = showProjected ? split.projInc : split.realInc
-  const activeExp = showProjected ? split.projExp : split.realExp
+  const activeInc = showProjected ? splitProj.projInc : splitAll.realInc
+  const activeExp = showProjected ? splitProj.projExp : splitAll.realExp
 
-  const saving = split.realInc > 0
-    ? ((split.realInc - split.realExp) / split.realInc * 100)
+  const saving = splitAll.realInc > 0
+    ? ((splitAll.realInc - splitAll.realExp) / splitAll.realInc * 100)
     : 0
 
   const topExp = txs
@@ -152,6 +171,12 @@ export default function Dashboard({
 
   const pending = txs.filter(t => t.status === 'projetado')
   const recent = [...txs].slice(0, 5)
+
+  const minDate = toISODate(year, month, 1)
+  const maxDate = toISODate(year, month, lastDayOfMonth(year, month))
+
+  const projDateObj = new Date(projDate + 'T12:00:00')
+  const projDateLabel = `${projDateObj.getDate()}/${projDateObj.getMonth() + 1}`
 
   return (
     <>
@@ -205,7 +230,7 @@ export default function Dashboard({
         </div>
 
         <div className="balance-label">
-          Saldo {showProjected ? 'projetado' : 'realizado'}
+          Saldo {showProjected ? `projetado até ${projDateLabel}` : 'realizado'}
         </div>
         <div className="balance-value">
           {activeBalance < 0 ? '-' : ''}{fmt(Math.abs(activeBalance))}
@@ -214,6 +239,29 @@ export default function Dashboard({
           <span className="balance-inc">↑ {fmt(activeInc)}</span>
           <span className="balance-exp">↓ {fmt(activeExp)}</span>
         </div>
+
+        {/* Seletor de data no modo projetado */}
+        {showProjected && (
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 11, color: 'var(--ivory-muted)', fontWeight: 300, letterSpacing: '0.3px' }}>
+              Projetar até
+            </label>
+            <input
+              type="date"
+              value={projDate}
+              min={minDate}
+              max={maxDate}
+              onChange={e => setProjDate(e.target.value)}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '0.5px solid rgba(191,167,111,0.25)',
+                borderRadius: 6, color: 'var(--ivory)',
+                fontSize: 12, padding: '4px 8px',
+                fontFamily: 'var(--font-mono)', colorScheme: 'dark'
+              }}
+            />
+          </div>
+        )}
 
         {/* Indicador de diferença entre projetado e realizado */}
         {!showProjected && pending.length > 0 && (
@@ -273,7 +321,7 @@ export default function Dashboard({
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-label">Economia</div>
-          <div className="stat-value">{fmt(Math.abs(split.realBalance))}</div>
+          <div className="stat-value">{fmt(Math.abs(splitAll.realBalance))}</div>
           <div className={`stat-badge ${saving >= 0 ? 'badge-up' : 'badge-down'}`}>
             {saving.toFixed(0)}% da renda
           </div>
