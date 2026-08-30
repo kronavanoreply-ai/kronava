@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CATEGORIES, getCategories, getSubcategories } from '../data/categories.js'
+import { getAccounts } from '../store/supabase.js'
 
-export default function AddModal({ onClose, onSave }) {
+export default function AddModal({ userId, onClose, onSave }) {
   const [type, setType] = useState('expense')
   const [status, setStatus] = useState('realizado')
   const [amount, setAmount] = useState('')
@@ -13,9 +14,19 @@ export default function AddModal({ onClose, onSave }) {
   const [loading, setLoading] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [months, setMonths] = useState(12)
+  const [accounts, setAccounts] = useState([])
+  const [accountId, setAccountId] = useState('')
 
   const categories = getCategories(type)
   const subcategories = category ? getSubcategories(type, category) : []
+
+  useEffect(() => {
+    if (!userId) return
+    getAccounts(userId).then(accs => {
+      setAccounts(accs)
+      if (accs.length > 0) setAccountId(accs[0].id)
+    })
+  }, [userId])
 
   function handleTypeChange(t) {
     setType(t); setCategory(''); setSubcategory(''); setError('')
@@ -50,6 +61,7 @@ export default function AddModal({ onClose, onSave }) {
         isRecurring,
         months: isRecurring ? months : 1,
         dayOfMonth,
+        accountId: accountId || null,
       })
     } catch (err) {
       setError(err.message || 'Erro ao salvar')
@@ -103,6 +115,18 @@ export default function AddModal({ onClose, onSave }) {
           <input className="form-input" type="date"
             value={date} onChange={e => setDate(e.target.value)} />
         </div>
+
+        {accounts.length > 0 && (
+          <div className="form-group">
+            <label className="form-label">Conta</label>
+            <select className="form-input" value={accountId}
+              onChange={e => setAccountId(e.target.value)}>
+              {accounts.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="form-group">
           <label className="form-label">Categoria</label>

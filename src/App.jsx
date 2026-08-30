@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard.jsx'
 import Transactions from './components/Transactions.jsx'
 import Charts from './components/Charts.jsx'
 import Planning from './components/Planning.jsx'
+import Accounts from './components/Accounts.jsx'
 import TelegramLink from './components/TelegramLink.jsx'
 import AddModal from './components/AddModal.jsx'
 import Toast from './components/Toast.jsx'
@@ -120,6 +121,7 @@ export default function App() {
         subcategory: tx.subcategory,
         is_recurring: tx.isRecurring,
         recurring_rule_id: ruleId,
+        account_id: tx.accountId || null,
       })
     }
 
@@ -171,6 +173,9 @@ export default function App() {
       <div className={`screen ${screen === 'planning' ? 'active' : ''}`}>
         <Planning {...sharedProps} />
       </div>
+      <div className={`screen ${screen === 'accounts' ? 'active' : ''}`}>
+        <Accounts {...sharedProps} />
+      </div>
       <div className={`screen ${screen === 'telegram' ? 'active' : ''}`}>
         <TelegramLink userId={session.user.id} />
       </div>
@@ -181,6 +186,7 @@ export default function App() {
           { id: 'transactions', icon: 'ti-list',       label: 'Transações' },
           { id: 'charts',       icon: 'ti-chart-bar',  label: 'Análise'    },
           { id: 'planning',     icon: 'ti-target',     label: 'Planejar'   },
+          { id: 'accounts',     icon: 'ti-wallet',     label: 'Contas'     },
           { id: 'telegram',     icon: 'ti-brand-telegram', label: 'Telegram' },
         ].map(nav => (
           <button key={nav.id}
@@ -196,6 +202,7 @@ export default function App() {
 
       {showAdd && (
         <AddModal
+          userId={session.user.id}
           onClose={() => setShowAdd(false)}
           onSave={handleSaveTx} />
       )}

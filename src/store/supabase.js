@@ -24,6 +24,13 @@ export const CATS_INC = [
   { id: 'other',     label: 'Outros',        icon: '📦', color: '#9ca3af' },
 ]
 
+export const ACCOUNT_TYPES = [
+  { id: 'corrente',  label: 'Conta Corrente', icon: '🏦' },
+  { id: 'poupanca',  label: 'Poupança',       icon: '💰' },
+  { id: 'carteira',  label: 'Carteira',       icon: '👛' },
+  { id: 'outro',     label: 'Outro',          icon: '📦' },
+]
+
 export const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 export const MONTHS_FULL  = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
@@ -74,7 +81,6 @@ export async function getAccumulatedBalance(userId, year, month) {
 export async function getMonthBudgets(userId, year, month) {
   const key = monthKey(year, month)
 
-  // Busca orçamento do mês atual
   const { data, error } = await supabase
     .from('budgets')
     .select('*')
@@ -82,14 +88,12 @@ export async function getMonthBudgets(userId, year, month) {
     .eq('month_key', key)
   if (error) throw error
 
-  // Se tem orçamento definido, retorna ele
   if (data && data.length > 0) {
     const result = {}
     data.forEach(r => { result[r.category] = r.amount })
     return result
   }
 
-  // Se não tem, busca o mês anterior como padrão
   let prevMonth = month - 1
   let prevYear = year
   if (prevMonth < 0) { prevMonth = 11; prevYear-- }
@@ -103,7 +107,6 @@ export async function getMonthBudgets(userId, year, month) {
   if (prevError) throw prevError
 
   if (prevData && prevData.length > 0) {
-    // Copia automaticamente o orçamento do mês anterior
     const rows = prevData.map(r => ({
       user_id: userId,
       month_key: key,
@@ -148,4 +151,117 @@ export function calcTotals(txs) {
 export function calcRealized(txs) {
   const realized = txs.filter(t => t.status === 'realizado')
   return calcTotals(realized)
+}
+
+// ===== CONTAS (accounts) =====
+
+export async function getAccounts(userId) {
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+export async function createAccount(userId, { name, type, color, initial_balance }) {
+  const { data, error } = await supabase
+    .from('accounts')
+    .insert([{
+      user_id: userId,
+      name,
+      type,
+      color: color || '#bfa76f',
+      initial_balance: initial_balance || 0
+    }])
+    .select()
+  if (error) throw error
+  return data?.[0]
+}
+
+export async function updateAccount(accountId, fields) {
+  const { error } = await supabase
+    .from('accounts')
+    .update(fields)
+    .eq('id', accountId)
+  if (error) throw error
+}
+
+export async function deleteAccount(accountId) {
+  const { error } = await supabase
+    .from('accounts')
+    .delete()
+    .eq('id', accountId)
+  if (error) throw error
+}
+
+// ===== TRANSFERÊNCIAS ENTRE CONTAS =====
+
+export async function createTransfer(userId, { from_account_id, to_account_id, amount, description, date }) {
+  const { data, error } = await supabase
+    .from('transfers')
+    .insert([{
+      user_id: userId,
+      from_account_id,
+      to_account_id,
+      amount,
+      description: description || null,
+      date: date || new Date().toISOString().slice(0, 10)
+    }])
+    .select()
+  if (error) throw error
+  return data?.[0]
+}
+
+export async function getTransfers(userId) {
+  const { data, error } = await supabase
+    .from('transfers')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function deleteTransfer(transferId) {
+  const { error } = await supabase
+    .from('transfers')
+    .delete()
+    .eq('id', transferId)
+  if (error) throw error
+}
+
+// ===== SALDO POR CONTA =====
+
+export async function getAccountsWithBalances(userId) {
+  const accounts = await getAccounts(userId)
+  if (accounts.length === 0) return []
+
+  const { data: txs, error: txError } = await supabase
+    .from('transactions')
+    .select('type, amount, account_id')
+    .eq('user_id', userId)
+    .eq('status', 'realizado')
+    .not('account_id', 'is', null)
+  if (txError) throw txError
+
+  const transfers = await getTransfers(userId)
+
+  return accounts.map(acc => {
+    let balance = parseFloat(acc.initial_balance) || 0
+
+    txs?.forEach(t => {
+      if (t.account_id !== acc.id) return
+      if (t.type === 'income') balance += parseFloat(t.amount)
+      else balance -= parseFloat(t.amount)
+    })
+
+    transfers.forEach(t => {
+      if (t.from_account_id === acc.id) balance -= parseFloat(t.amount)
+      if (t.to_account_id === acc.id) balance += parseFloat(t.amount)
+    })
+
+    return { ...acc, balance }
+  })
 }
