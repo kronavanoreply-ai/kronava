@@ -9,7 +9,7 @@ export const CATS_EXP = [
   { id: 'food',      label: 'Alimentação', icon: '🍔', color: '#7c6ff7' },
   { id: 'home',      label: 'Moradia',     icon: '🏠', color: '#4a9eff' },
   { id: 'transport', label: 'Transporte',  icon: '🚗', color: '#4ade80' },
-  { id: 'health',    label: 'Saúde',       icon: '❤️', color: '#f87171' },
+  { id: 'health',    label: 'Saúde',       icon: '⚕', color: '#f87171' },
   { id: 'leisure',   label: 'Lazer',       icon: '🎮', color: '#fbbf24' },
   { id: 'personal',  label: 'Pessoal',     icon: '👤', color: '#a78bfa' },
   { id: 'travel',    label: 'Viagens',     icon: '✈️', color: '#34d399' },
@@ -18,14 +18,7 @@ export const CATS_EXP = [
 
 export const CATS_INC = [
   { id: 'salary',    label: 'Salário',       icon: '💼', color: '#4ade80' },
-  { id: 'bonus',     label: 'Bônus',         icon: '⭐', color: '#fbbf24' },
-  { id: 'invest',    label: 'Investimentos', icon: '📈', color: '#4a9eff' },
-  { id: 'freelance', label: 'Freelance',     icon: '💻', color: '#a78bfa' },
-  { id: 'other',     label: 'Outros',        icon: '📦', color: '#9ca3af' },
-]
-
-export const ACCOUNT_TYPES = [
-  { id: 'corrente',  label: 'Conta Corrente', icon: '🏦' },
+  { id: 'bonus',     label: 'Bônus',         icon: '⦿' },
   { id: 'poupanca',  label: 'Poupança',       icon: '💰' },
   { id: 'carteira',  label: 'Carteira',       icon: '👛' },
   { id: 'outro',     label: 'Outro',          icon: '📦' },
@@ -153,6 +146,43 @@ export function calcRealized(txs) {
   return calcTotals(realized)
 }
 
+// ===== META DE ECONOMIA MENSAL =====
+
+export async function getSavingsGoal(userId, year, month) {
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('year', year)
+    .eq('month', month)
+    .maybeSingle()
+  if (error) throw error
+  return data?.target_amount || 0
+}
+
+export async function saveSavingsGoal(userId, year, month, targetAmount) {
+  if (!targetAmount || targetAmount <= 0) {
+    const { error } = await supabase
+      .from('savings_goals')
+      .delete()
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+    if (error) throw error
+    return
+  }
+
+  const { error } = await supabase
+    .from('savings_goals')
+    .upsert({
+      user_id: userId,
+      year,
+      month,
+      target_amount: targetAmount
+    }, { onConflict: 'user_id,year,month' })
+  if (error) throw error
+}
+
 // ===== CONTAS (accounts) =====
 
 export async function getAccounts(userId) {
@@ -265,3 +295,11 @@ export async function getAccountsWithBalances(userId) {
     return { ...acc, balance }
   })
 }
+
+export const ACCOUNT_TYPES = [
+  { id: 'corrente', label: 'Conta Corrente', icon: '??' },
+  { id: 'poupanca', label: 'Poupan�a', icon: '??' },
+  { id: 'carteira', label: 'Carteira', icon: '??' },
+  { id: 'investimento', label: 'Investimento', icon: '??' },
+  { id: 'outro', label: 'Outro', icon: '??' },
+]
