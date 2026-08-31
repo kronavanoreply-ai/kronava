@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+ï»¿import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -298,7 +298,7 @@ export async function getAccountsWithBalances(userId) {
 
 export const ACCOUNT_TYPES = [
   { id: 'corrente', label: 'Conta Corrente', icon: '??' },
-  { id: 'poupanca', label: 'Poupança', icon: '??' },
+  { id: 'poupanca', label: 'Poupanï¿½a', icon: '??' },
   { id: 'carteira', label: 'Carteira', icon: '??' },
   { id: 'investimento', label: 'Investimento', icon: '??' },
   { id: 'outro', label: 'Outro', icon: '??' },
