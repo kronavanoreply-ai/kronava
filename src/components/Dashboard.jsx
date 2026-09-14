@@ -101,6 +101,10 @@ function toISODate(year, month, day) {
   return `${year}-${pad2(month + 1)}-${pad2(day)}`
 }
 
+function toISODateFromDate(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
 export default function Dashboard({
   userId, profile, month, year, refresh,
   onAddClick, onViewAll, onPrevMonth, onNextMonth, onLogout
@@ -175,6 +179,18 @@ export default function Dashboard({
 
   const pending = txs.filter(t => t.status === 'projetado')
   const recent = [...txs].slice(0, 5)
+
+  // Vencendo essa semana: pendentes com date_projected entre hoje e hoje+7 dias
+  const todayDate = new Date()
+  todayDate.setHours(0, 0, 0, 0)
+  const in7Days = new Date(todayDate)
+  in7Days.setDate(in7Days.getDate() + 7)
+  const todayISO = toISODateFromDate(todayDate)
+  const in7ISO = toISODateFromDate(in7Days)
+
+  const vencendoSemana = pending
+    .filter(t => t.date_projected >= todayISO && t.date_projected <= in7ISO)
+    .sort((a, b) => a.date_projected.localeCompare(b.date_projected))
 
   const minDate = toISODate(year, month, 1)
   const maxDate = toISODate(year, month, lastDayOfMonth(year, month))
@@ -299,6 +315,38 @@ export default function Dashboard({
         saldoProjetado={saldoProjetadoFimMes}
       />
 
+      {vencendoSemana.length > 0 && (
+        <div className="proj-banner">
+          <div className="proj-row">
+            <span className="proj-label">Vencendo essa semana</span>
+            <span className="proj-value" style={{ color: 'var(--red)' }}>
+              {vencendoSemana.length} lançamento{vencendoSemana.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          {vencendoSemana.map(t => {
+            const label = t.category || 'Outros'
+            const d = new Date(t.date_projected + 'T12:00:00')
+            const dateStr = `${d.getDate()}/${d.getMonth() + 1}`
+            return (
+              <div key={t.id} style={{
+                display: 'flex', justifyContent: 'space-between',
+                fontSize: 12, color: 'var(--ivory-dim)', marginTop: 8, fontWeight: 300
+              }}>
+                <span style={{ textTransform: 'capitalize' }}>
+                  {t.description || label} <span style={{ opacity: 0.6 }}>· {dateStr}</span>
+                </span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: t.type === 'income' ? 'var(--green)' : 'var(--red)'
+                }}>
+                  {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {pending.length > 0 && (
         <div className="proj-banner">
           <div className="proj-row">
@@ -368,4 +416,3 @@ export default function Dashboard({
     </>
   )
 }
-

@@ -3,6 +3,11 @@ import { getMonthTransactions, calcRealized, fmt, MONTHS_FULL, supabase } from '
 import { getCategories, getSubcategories } from '../data/categories.js'
 import Confirm from './Confirm.jsx'
 
+function pad2(n) { return String(n).padStart(2, '0') }
+function toISODateFromDate(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
 function EditModal({ tx, onClose, onSave }) {
   const [type, setType] = useState(tx.type)
   const [status, setStatus] = useState(tx.status)
@@ -52,7 +57,7 @@ function EditModal({ tx, onClose, onSave }) {
       <div className="modal">
         <div className="modal-title">
           Editar transação
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         <div className="type-toggle">
@@ -204,10 +209,29 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
   }, [txs])
 
   const filtered = useMemo(() => {
-    let result = filter === 'all' ? txs
-      : filter === 'projetado' ? txs.filter(t => t.status === 'projetado')
-      : filter === 'realizado' ? txs.filter(t => t.status === 'realizado')
-      : txs.filter(t => t.type === filter)
+    let result
+
+    if (filter === 'all') {
+      result = txs
+    } else if (filter === 'projetado') {
+      result = txs.filter(t => t.status === 'projetado')
+    } else if (filter === 'realizado') {
+      result = txs.filter(t => t.status === 'realizado')
+    } else if (filter === 'semana') {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const in7 = new Date(today)
+      in7.setDate(in7.getDate() + 7)
+      const todayISO = toISODateFromDate(today)
+      const in7ISO = toISODateFromDate(in7)
+      result = txs.filter(t =>
+        t.status === 'projetado' &&
+        t.date_projected >= todayISO &&
+        t.date_projected <= in7ISO
+      )
+    } else {
+      result = txs.filter(t => t.type === filter)
+    }
 
     if (categoryFilter !== 'all') {
       result = result.filter(t => t.category === categoryFilter)
@@ -263,6 +287,7 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
     ['income', 'Receitas'],
     ['projetado', 'Projetadas'],
     ['realizado', 'Realizadas'],
+    ['semana', 'Essa semana'],
   ]
 
   return (
