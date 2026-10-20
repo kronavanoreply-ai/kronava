@@ -202,7 +202,7 @@ export default function Dashboard({
     <>
       <div className="header" style={{ alignItems: 'flex-start' }}>
         <div>
-          <div className="greeting">Olá, {profile?.name?.split(' ')[0] || 'Ricardo'}</div>
+          <div className="greeting">Olá, {profile?.name?.split(' ')[0] || 'usuário(a)'}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
             <button onClick={onPrevMonth} aria-label="Mês anterior" style={{
               background: 'none', border: 'none', color: 'var(--gold)',

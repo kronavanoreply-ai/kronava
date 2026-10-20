@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, getCategories, getSubcategories } from '../data/categories.js'
-import { getAccounts } from '../store/supabase.js'
+import { getAccounts, getCards } from '../store/supabase.js'
 
 export default function AddModal({ userId, onClose, onSave }) {
   const [type, setType] = useState('expense')
@@ -16,6 +16,10 @@ export default function AddModal({ userId, onClose, onSave }) {
   const [months, setMonths] = useState(12)
   const [accounts, setAccounts] = useState([])
   const [accountId, setAccountId] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('conta') // 'conta' | 'cartao'
+  const [cards, setCards] = useState([])
+  const [cardId, setCardId] = useState('')
+  const [installments, setInstallments] = useState(1)
 
   const categories = getCategories(type)
   const subcategories = category ? getSubcategories(type, category) : []
@@ -26,14 +30,24 @@ export default function AddModal({ userId, onClose, onSave }) {
       setAccounts(accs)
       if (accs.length > 0) setAccountId(accs[0].id)
     })
+    getCards(userId).then(cds => {
+      setCards(cds)
+      if (cds.length > 0) setCardId(cds[0].id)
+    })
   }, [userId])
 
   function handleTypeChange(t) {
     setType(t); setCategory(''); setSubcategory(''); setError('')
+    if (t === 'income') setPaymentMethod('conta')
   }
 
   function handleCategoryChange(c) {
     setCategory(c); setSubcategory(''); setError('')
+  }
+
+  function handlePaymentMethodChange(m) {
+    setPaymentMethod(m)
+    if (m === 'cartao') setIsRecurring(false)
   }
 
   async function handleSave() {
@@ -44,6 +58,12 @@ export default function AddModal({ userId, onClose, onSave }) {
     if (!subcategory) { setError('Selecione uma subcategoria'); return }
     if (isRecurring && (!months || months < 2 || months > 60)) {
       setError('Informe entre 2 e 60 meses'); return
+    }
+    if (paymentMethod === 'cartao') {
+      if (!cardId) { setError('Selecione um cartão'); return }
+      if (!installments || installments < 1 || installments > 24) {
+        setError('Informe entre 1 e 24 parcelas'); return
+      }
     }
 
     setLoading(true)
@@ -61,7 +81,9 @@ export default function AddModal({ userId, onClose, onSave }) {
         isRecurring,
         months: isRecurring ? months : 1,
         dayOfMonth,
-        accountId: accountId || null,
+        accountId: paymentMethod === 'conta' ? (accountId || null) : null,
+        cardId: paymentMethod === 'cartao' ? cardId : null,
+        installments: paymentMethod === 'cartao' ? installments : 1,
       })
     } catch (err) {
       setError(err.message || 'Erro ao salvar')
@@ -84,12 +106,23 @@ export default function AddModal({ userId, onClose, onSave }) {
             onClick={() => handleTypeChange('income')}>Receita</button>
         </div>
 
-        <div className="status-toggle">
-          <button className={`status-btn ${status === 'projetado' ? 'active-proj' : ''}`}
-            onClick={() => setStatus('projetado')}>Projetado</button>
-          <button className={`status-btn ${status === 'realizado' ? 'active-real' : ''}`}
-            onClick={() => setStatus('realizado')}>Realizado</button>
-        </div>
+        {type === 'expense' && (
+          <div className="status-toggle">
+            <button className={`status-btn ${paymentMethod === 'conta' ? 'active-real' : ''}`}
+              onClick={() => handlePaymentMethodChange('conta')}>Dinheiro / Débito</button>
+            <button className={`status-btn ${paymentMethod === 'cartao' ? 'active-proj' : ''}`}
+              onClick={() => handlePaymentMethodChange('cartao')}>Cartão de crédito</button>
+          </div>
+        )}
+
+        {paymentMethod === 'conta' && (
+          <div className="status-toggle">
+            <button className={`status-btn ${status === 'projetado' ? 'active-proj' : ''}`}
+              onClick={() => setStatus('projetado')}>Projetado</button>
+            <button className={`status-btn ${status === 'realizado' ? 'active-real' : ''}`}
+              onClick={() => setStatus('realizado')}>Realizado</button>
+          </div>
+        )}
 
         <div className="form-group">
           <label className="form-label">Valor (R$)</label>
@@ -110,13 +143,13 @@ export default function AddModal({ userId, onClose, onSave }) {
 
         <div className="form-group">
           <label className="form-label">
-            {status === 'projetado' ? 'Data prevista' : 'Data'}
+            {paymentMethod === 'cartao' ? 'Data da compra' : (status === 'projetado' ? 'Data prevista' : 'Data')}
           </label>
           <input className="form-input" type="date"
             value={date} onChange={e => setDate(e.target.value)} />
         </div>
 
-        {accounts.length > 0 && (
+        {paymentMethod === 'conta' && accounts.length > 0 && (
           <div className="form-group">
             <label className="form-label">Conta</label>
             <select className="form-input" value={accountId}
@@ -126,6 +159,34 @@ export default function AddModal({ userId, onClose, onSave }) {
               ))}
             </select>
           </div>
+        )}
+
+        {paymentMethod === 'cartao' && (
+          <>
+            {cards.length === 0 ? (
+              <div className="form-group">
+                <div className="error-msg">Você ainda não tem cartões cadastrados. Cadastre um na aba Cartões antes de continuar.</div>
+              </div>
+            ) : (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Cartão</label>
+                  <select className="form-input" value={cardId}
+                    onChange={e => setCardId(e.target.value)}>
+                    {cards.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Parcelas</label>
+                  <input className="form-input" type="number" min="1" max="24"
+                    value={installments}
+                    onChange={e => setInstallments(parseInt(e.target.value) || 1)} />
+                </div>
+              </>
+            )}
+          </>
         )}
 
         <div className="form-group">
@@ -156,15 +217,17 @@ export default function AddModal({ userId, onClose, onSave }) {
           </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-            <input type="checkbox" checked={isRecurring}
-              onChange={e => setIsRecurring(e.target.checked)} />
-            Transação recorrente (mensal)
-          </label>
-        </div>
+        {paymentMethod === 'conta' && (
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={isRecurring}
+                onChange={e => setIsRecurring(e.target.checked)} />
+              Transação recorrente (mensal)
+            </label>
+          </div>
+        )}
 
-        {isRecurring && (
+        {isRecurring && paymentMethod === 'conta' && (
           <div className="form-group">
             <label className="form-label">Repetir por quantos meses</label>
             <input className="form-input" type="number" min="2" max="60"
@@ -175,7 +238,7 @@ export default function AddModal({ userId, onClose, onSave }) {
 
         {error && <div className="error-msg">{error}</div>}
 
-        <button className="submit-btn" onClick={handleSave} disabled={loading}>
+        <button className="submit-btn" onClick={handleSave} disabled={loading || (paymentMethod === 'cartao' && cards.length === 0)}>
           {loading ? 'Salvando...' : 'Salvar transação'}
         </button>
       </div>

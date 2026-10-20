@@ -298,8 +298,238 @@ export async function getAccountsWithBalances(userId) {
 
 export const ACCOUNT_TYPES = [
   { id: 'corrente', label: 'Conta Corrente', icon: '??' },
-  { id: 'poupanca', label: 'Poupan�a', icon: '??' },
+  { id: 'poupanca', label: 'Poupança', icon: '??' },
   { id: 'carteira', label: 'Carteira', icon: '??' },
   { id: 'investimento', label: 'Investimento', icon: '??' },
   { id: 'outro', label: 'Outro', icon: '??' },
 ]
+
+// ===== CARTÕES DE CRÉDITO =====
+
+export async function getCards(userId) {
+  const { data, error } = await supabase
+    .from('cards')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+export async function createCard(userId, { name, limit_amount, closing_day, due_day, color }) {
+  const { data, error } = await supabase
+    .from('cards')
+    .insert([{
+      user_id: userId,
+      name,
+      limit_amount,
+      closing_day,
+      due_day,
+      color: color || '#bfa76f'
+    }])
+    .select()
+  if (error) throw error
+  return data?.[0]
+}
+
+export async function updateCard(cardId, fields) {
+  const { error } = await supabase
+    .from('cards')
+    .update(fields)
+    .eq('id', cardId)
+  if (error) throw error
+}
+
+export async function deleteCard(cardId) {
+  const { error } = await supabase
+    .from('cards')
+    .delete()
+    .eq('id', cardId)
+  if (error) throw error
+}
+
+// Calcula a data de referência (YYYY-MM) da fatura para uma data de compra
+export function getInvoiceReferenceMonth(purchaseDate, closingDay) {
+  const d = new Date(purchaseDate)
+  const day = d.getDate()
+  let year = d.getFullYear()
+  let month = d.getMonth() // 0-indexed
+
+  if (day > closingDay) {
+    month += 1
+    if (month > 11) { month = 0; year += 1 }
+  }
+  return monthKey(year, month)
+}
+
+// Soma n meses a uma referência "YYYY-MM", retornando nova referência "YYYY-MM"
+export function addMonthsToReference(referenceMonth, n) {
+  const [year, month] = referenceMonth.split('-').map(Number) // month 1-indexed
+  const d = new Date(year, month - 1 + n, 1)
+  return monthKey(d.getFullYear(), d.getMonth())
+}
+
+// Garante que a fatura exista (cria se não existir) e retorna o id
+export async function getOrCreateInvoice(cardId, referenceMonth, closingDay, dueDay) {
+  const { data: existing, error: findError } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('card_id', cardId)
+    .eq('reference_month', referenceMonth)
+    .maybeSingle()
+  if (findError) throw findError
+  if (existing) return existing
+
+  const [year, month] = referenceMonth.split('-').map(Number)
+  const closingDate = new Date(year, month - 1, closingDay).toISOString().slice(0, 10)
+  let dueYear = year, dueMonth = month
+  if (dueDay < closingDay) {
+    dueMonth += 1
+    if (dueMonth > 12) { dueMonth = 1; dueYear += 1 }
+  }
+  const dueDate = new Date(dueYear, dueMonth - 1, dueDay).toISOString().slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('invoices')
+    .insert([{
+      card_id: cardId,
+      reference_month: referenceMonth,
+      closing_date: closingDate,
+      due_date: dueDate,
+      status: 'open',
+      total_amount: 0
+    }])
+    .select()
+  if (error) throw error
+  return data?.[0]
+}
+
+export async function getCardInvoices(cardId) {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('card_id', cardId)
+    .order('reference_month', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function getInvoiceTransactions(invoiceId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('invoice_id', invoiceId)
+    .order('date_projected', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function payInvoice(userId, invoice, accountId) {
+  const { error: txError } = await supabase
+    .from('transactions')
+    .insert([{
+      user_id: userId,
+      type: 'expense',
+      amount: invoice.total_amount,
+      description: 'Pagamento de fatura',
+      category: 'card_payment',
+      status: 'realizado',
+      date_projected: new Date().toISOString().slice(0, 10),
+      account_id: accountId || null
+    }])
+  if (txError) throw txError
+
+  const { error: invError } = await supabase
+    .from('invoices')
+    .update({ status: 'paid', paid_at: new Date().toISOString() })
+    .eq('id', invoice.id)
+  if (invError) throw invError
+}
+
+export async function getCardsWithAvailableLimit(userId) {
+  const cards = await getCards(userId)
+  if (cards.length === 0) return []
+
+  const { data: txs, error } = await supabase
+    .from('transactions')
+    .select('amount, card_id, invoice_id')
+    .eq('user_id', userId)
+    .not('card_id', 'is', null)
+  if (error) throw error
+
+  const cardIds = cards.map(c => c.id)
+  const { data: invoices, error: invError } = await supabase
+    .from('invoices')
+    .select('id, status')
+    .in('card_id', cardIds)
+  if (invError) throw invError
+
+  const paidInvoiceIds = new Set(invoices.filter(i => i.status === 'paid').map(i => i.id))
+
+  return cards.map(card => {
+    let committed = 0
+    txs?.forEach(t => {
+      if (t.card_id !== card.id) return
+      if (t.invoice_id && paidInvoiceIds.has(t.invoice_id)) return
+      committed += parseFloat(t.amount)
+    })
+    return {
+      ...card,
+      committed,
+      available_limit: parseFloat(card.limit_amount) - committed
+    }
+  })
+}
+
+// ===== COMPRA NO CARTÃO (COM OU SEM PARCELAMENTO) =====
+// Cria N transações (uma por parcela), cada uma vinculada à fatura correta.
+// A 1ª parcela usa a data da compra; as demais caem no mesmo dia nos meses seguintes.
+// Status: a parcela cuja fatura já fechou/está em aberto no passado fica "realizado"
+// apenas se for a parcela atual; as futuras ficam "projetado".
+export async function createCardPurchase(userId, {
+  cardId, amount, description, date, category, subcategory, installments
+}) {
+  const { data: card, error: cardError } = await supabase
+    .from('cards')
+    .select('*')
+    .eq('id', cardId)
+    .single()
+  if (cardError) throw cardError
+
+  const total = installments || 1
+  const installmentAmount = Math.round((amount / total) * 100) / 100
+  // Ajuste de centavos: a última parcela absorve a diferença de arredondamento
+  const roundingDiff = Math.round((amount - installmentAmount * total) * 100) / 100
+
+  const baseReferenceMonth = getInvoiceReferenceMonth(date, card.closing_day)
+  const rows = []
+
+  for (let i = 0; i < total; i++) {
+    const referenceMonth = addMonthsToReference(baseReferenceMonth, i)
+    const invoice = await getOrCreateInvoice(cardId, referenceMonth, card.closing_day, card.due_day)
+
+    const isLast = i === total - 1
+    const value = isLast ? installmentAmount + roundingDiff : installmentAmount
+
+    rows.push({
+      user_id: userId,
+      type: 'expense',
+      status: 'projetado',
+      amount: value,
+      description: total > 1 ? `${description} (${i + 1}/${total})` : description,
+      date_projected: invoice.due_date,
+      date_realized: null,
+      category,
+      subcategory,
+      is_recurring: false,
+      card_id: cardId,
+      invoice_id: invoice.id,
+      installment_number: i + 1,
+      installment_total: total,
+    })
+  }
+
+  const { data, error } = await supabase.from('transactions').insert(rows).select()
+  if (error) throw error
+  return data
+}

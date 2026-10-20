@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from './store/supabase.js'
+import { supabase, createCardPurchase } from './store/supabase.js'
 import { getProfile } from './store/auth.js'
 import Auth from './components/Auth.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -7,6 +7,7 @@ import Transactions from './components/Transactions.jsx'
 import Charts from './components/Charts.jsx'
 import Planning from './components/Planning.jsx'
 import Accounts from './components/Accounts.jsx'
+import Cards from './components/Cards.jsx'
 import TelegramLink from './components/TelegramLink.jsx'
 import AddModal from './components/AddModal.jsx'
 import Toast from './components/Toast.jsx'
@@ -80,6 +81,25 @@ export default function App() {
 
   async function handleSaveTx(tx) {
     const userId = session.user.id
+
+    // Fluxo de compra no cartão de crédito (com ou sem parcelamento)
+    if (tx.cardId) {
+      const rows = await createCardPurchase(userId, {
+        cardId: tx.cardId,
+        amount: tx.amount,
+        description: tx.description,
+        date: tx.date,
+        category: tx.category,
+        subcategory: tx.subcategory,
+        installments: tx.installments || 1,
+      })
+
+      doRefresh()
+      setShowAdd(false)
+      showToast(rows.length > 1 ? `Compra parcelada em ${rows.length}x salva ✓` : 'Compra no cartão salva ✓')
+      return
+    }
+
     let ruleId = null
 
     if (tx.isRecurring) {
@@ -176,6 +196,9 @@ export default function App() {
       <div className={`screen ${screen === 'accounts' ? 'active' : ''}`}>
         <Accounts {...sharedProps} />
       </div>
+      <div className={`screen ${screen === 'cards' ? 'active' : ''}`}>
+        <Cards {...sharedProps} />
+      </div>
       <div className={`screen ${screen === 'telegram' ? 'active' : ''}`}>
         <TelegramLink userId={session.user.id} />
       </div>
@@ -187,6 +210,7 @@ export default function App() {
           { id: 'charts',       icon: 'ti-chart-bar',  label: 'Análise'    },
           { id: 'planning',     icon: 'ti-target',     label: 'Planejar'   },
           { id: 'accounts',     icon: 'ti-wallet',     label: 'Contas'     },
+          { id: 'cards',        icon: 'ti-credit-card', label: 'Cartões'   },
           { id: 'telegram',     icon: 'ti-brand-telegram', label: 'Telegram' },
         ].map(nav => (
           <button key={nav.id}
