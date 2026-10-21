@@ -26,7 +26,7 @@ function SaldoInicialModal({ current, onClose, onSave }) {
           Saldo inicial
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--ivory-muted)', marginBottom: 20, lineHeight: 1.7, fontWeight: 300 }}>
+        <p style={{ fontSize: 14, color: 'var(--ivory-muted)', marginBottom: 20, lineHeight: 1.7, fontWeight: 300 }}>
           Informe quanto você tinha na conta antes de começar a usar o Kronava.
         </p>
         <div className="form-group">
@@ -206,21 +206,21 @@ export default function Dashboard({
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
             <button onClick={onPrevMonth} aria-label="Mês anterior" style={{
               background: 'none', border: 'none', color: 'var(--gold)',
-              fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1
+              fontSize: 20, cursor: 'pointer', padding: '0 4px', lineHeight: 1
             }}>‹</button>
             <div className="page-title">{MONTHS_FULL[month]} {year}</div>
             <button onClick={onNextMonth} aria-label="Próximo mês" style={{
               background: 'none', border: 'none', color: 'var(--gold)',
-              fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1
+              fontSize: 20, cursor: 'pointer', padding: '0 4px', lineHeight: 1
             }}>›</button>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="header-btn" onClick={onAddClick} aria-label="Adicionar transação">
-            <i className="ti ti-plus" style={{ fontSize: 16 }} />
+            <i className="ti ti-plus" style={{ fontSize: 18 }} />
           </button>
           <button className="header-btn" onClick={onLogout} aria-label="Sair da conta" title="Sair">
-            <i className="ti ti-logout" style={{ fontSize: 16 }} />
+            <i className="ti ti-logout" style={{ fontSize: 18 }} />
           </button>
         </div>
       </div>
@@ -239,8 +239,8 @@ export default function Dashboard({
                 background: active ? 'rgba(191,167,111,0.15)' : 'none',
                 border: active ? '0.5px solid rgba(191,167,111,0.35)' : '0.5px solid transparent',
                 borderRadius: 6, color: active ? 'var(--gold)' : 'var(--ivory-muted)',
-                fontSize: 11, fontWeight: active ? 500 : 300,
-                padding: '4px 12px', cursor: 'pointer', letterSpacing: '0.4px',
+                fontSize: 13, fontWeight: active ? 500 : 300,
+                padding: '5px 13px', cursor: 'pointer', letterSpacing: '0.4px',
                 transition: 'all 0.2s'
               }}>
                 {label}
@@ -263,7 +263,7 @@ export default function Dashboard({
         {/* Seletor de data no modo projetado */}
         {showProjected && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 11, color: 'var(--ivory-muted)', fontWeight: 300, letterSpacing: '0.3px' }}>
+            <label style={{ fontSize: 13, color: 'var(--ivory-muted)', fontWeight: 300, letterSpacing: '0.3px' }}>
               Projetar até
             </label>
             <input
@@ -276,7 +276,7 @@ export default function Dashboard({
                 background: 'rgba(255,255,255,0.04)',
                 border: '0.5px solid rgba(191,167,111,0.25)',
                 borderRadius: 6, color: 'var(--ivory)',
-                fontSize: 12, padding: '4px 8px',
+                fontSize: 14, padding: '5px 9px',
                 fontFamily: 'var(--font-mono)', colorScheme: 'dark'
               }}
             />
@@ -286,7 +286,7 @@ export default function Dashboard({
         {/* Indicador de diferença entre projetado e realizado */}
         {!showProjected && pending.length > 0 && (
           <div style={{
-            marginTop: 10, fontSize: 11, color: 'var(--ivory-muted)',
+            marginTop: 10, fontSize: 13, color: 'var(--ivory-muted)',
             fontWeight: 300, letterSpacing: '0.3px'
           }}>
             Projetado ao fim do mês:{' '}
@@ -302,7 +302,7 @@ export default function Dashboard({
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: '0.5px solid rgba(191,167,111,0.1)' }}>
           <button onClick={() => setShowSaldoModal(true)} style={{
             background: 'none', border: 'none',
-            color: 'var(--ivory-muted)', fontSize: 11,
+            color: 'var(--ivory-muted)', fontSize: 13,
             cursor: 'pointer', fontWeight: 300, letterSpacing: '0.3px'
           }}>
             {initialBalance > 0 ? `Saldo inicial · ${fmt(initialBalance)} · Editar` : '+ Definir saldo inicial'}
@@ -330,7 +330,7 @@ export default function Dashboard({
             return (
               <div key={t.id} style={{
                 display: 'flex', justifyContent: 'space-between',
-                fontSize: 12, color: 'var(--ivory-dim)', marginTop: 8, fontWeight: 300
+                fontSize: 14, color: 'var(--ivory-dim)', marginTop: 10, fontWeight: 300
               }}>
                 <span style={{ textTransform: 'capitalize' }}>
                   {t.description || label} <span style={{ opacity: 0.6 }}>· {dateStr}</span>
@@ -360,7 +360,7 @@ export default function Dashboard({
             return (
               <div key={t.id} style={{
                 display: 'flex', justifyContent: 'space-between',
-                fontSize: 12, color: 'var(--ivory-dim)', marginTop: 8, fontWeight: 300
+                fontSize: 14, color: 'var(--ivory-dim)', marginTop: 10, fontWeight: 300
               }}>
                 <span style={{ textTransform: 'capitalize' }}>{t.description || label}</span>
                 <span style={{
