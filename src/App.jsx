@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, createCardPurchase } from './store/supabase.js'
+import { supabase, createCardPurchase, addMonthsToDate } from './store/supabase.js'
 import { getProfile } from './store/auth.js'
 import Auth from './components/Auth.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -69,16 +69,6 @@ export default function App() {
 
   function doRefresh() { setRefresh(r => r + 1) }
 
-  function addMonths(dateStr, n) {
-    const d = new Date(dateStr + 'T00:00:00')
-    const day = d.getDate()
-    d.setDate(1)
-    d.setMonth(d.getMonth() + n)
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
-    d.setDate(Math.min(day, lastDay))
-    return d.toISOString().split('T')[0]
-  }
-
   async function handleSaveTx(tx) {
     const userId = session.user.id
 
@@ -127,7 +117,7 @@ export default function App() {
     const rows = []
 
     for (let i = 0; i < total; i++) {
-      const occDate = i === 0 ? tx.date : addMonths(tx.date, i)
+      const occDate = i === 0 ? tx.date : addMonthsToDate(tx.date, i)
       const occStatus = i === 0 ? tx.status : 'projetado'
       rows.push({
         user_id: userId,
@@ -142,6 +132,8 @@ export default function App() {
         is_recurring: tx.isRecurring,
         recurring_rule_id: ruleId,
         account_id: tx.accountId || null,
+        installment_number: tx.isRecurring ? i + 1 : null,
+        installment_total: tx.isRecurring ? total : null,
       })
     }
 

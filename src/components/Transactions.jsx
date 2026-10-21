@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getMonthTransactions, calcRealized, fmt, MONTHS_FULL, supabase } from '../store/supabase.js'
+import { getMonthTransactions, calcRealized, fmt, MONTHS_FULL, supabase, updateRecurringTotal } from '../store/supabase.js'
 import { getCategories, getSubcategories } from '../data/categories.js'
 import Confirm from './Confirm.jsx'
 
@@ -8,7 +8,7 @@ function toISODateFromDate(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
-function EditModal({ tx, onClose, onSave }) {
+function EditModal({ tx, onClose, onSave, onUpdateRecurringTotal }) {
   const [type, setType] = useState(tx.type)
   const [status, setStatus] = useState(tx.status)
   const [amount, setAmount] = useState(String(tx.amount))
@@ -16,11 +16,13 @@ function EditModal({ tx, onClose, onSave }) {
   const [date, setDate] = useState(tx.date_projected)
   const [category, setCategory] = useState(tx.category || '')
   const [subcategory, setSubcategory] = useState(tx.subcategory || '')
+  const [totalRepeats, setTotalRepeats] = useState(tx.installment_total || 1)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const categories = getCategories(type)
   const subcategories = category ? getSubcategories(type, category) : []
+  const isRecurringSeries = !!tx.recurring_rule_id
 
   function handleTypeChange(t) {
     setType(t); setCategory(''); setSubcategory('')
@@ -36,6 +38,9 @@ function EditModal({ tx, onClose, onSave }) {
     if (!date) { setError('Informe a data'); return }
     if (!category) { setError('Selecione uma categoria'); return }
     if (!subcategory) { setError('Selecione uma subcategoria'); return }
+    if (isRecurringSeries && (!totalRepeats || totalRepeats < 1 || totalRepeats > 60)) {
+      setError('Informe entre 1 e 60 repetições'); return
+    }
     setLoading(true)
     try {
       await onSave(tx.id, {
@@ -46,6 +51,10 @@ function EditModal({ tx, onClose, onSave }) {
         category,
         subcategory,
       })
+
+      if (isRecurringSeries && totalRepeats !== tx.installment_total) {
+        await onUpdateRecurringTotal(tx.recurring_rule_id, totalRepeats)
+      }
     } catch (err) {
       setError(err.message || 'Erro ao salvar')
       setLoading(false)
@@ -97,6 +106,22 @@ function EditModal({ tx, onClose, onSave }) {
             value={date} onChange={e => setDate(e.target.value)} />
         </div>
 
+        {isRecurringSeries && (
+          <div className="form-group">
+            <label className="form-label">
+              Repetir por quantos meses (total da série)
+            </label>
+            <input className="form-input" type="number" min="1" max="60"
+              value={totalRepeats}
+              onChange={e => setTotalRepeats(parseInt(e.target.value) || 0)} />
+            <div style={{ fontSize: 11, color: 'var(--ivory-muted)', marginTop: 4 }}>
+              Atualmente: {tx.installment_number || 1}/{tx.installment_total || 1}.
+              Reduzir remove meses futuros ainda não confirmados; não é possível
+              remover meses já confirmados como realizados.
+            </div>
+          </div>
+        )}
+
         <div className="form-group">
           <label className="form-label">Categoria</label>
           <div className="cat-grid">
@@ -141,6 +166,7 @@ function TxItem({ tx, onDelete, onConfirm, onEdit }) {
   const d = new Date(tx.date_projected + 'T12:00:00')
   const dateStr = `${d.getDate()}/${d.getMonth() + 1}`
   const isProjected = tx.status === 'projetado'
+  const hasInstallments = tx.installment_total && tx.installment_total > 1
 
   return (
     <div className="tx-item">
@@ -151,9 +177,9 @@ function TxItem({ tx, onDelete, onConfirm, onEdit }) {
         <div className={`tx-status ${tx.status}`}>
           {isProjected
             ? <button onClick={() => onConfirm(tx)} style={{ background: 'none', border: 'none', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.05em' }}>
-                Projetado — toque para confirmar
+                Projetado{hasInstallments ? ` (${tx.installment_number}/${tx.installment_total})` : ''} — toque para confirmar
               </button>
-            : 'Realizado'}
+            : `Realizado${hasInstallments ? ` (${tx.installment_number}/${tx.installment_total})` : ''}`}
         </div>
       </div>
       <div className="tx-right">
@@ -183,6 +209,7 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
   const [loading, setLoading] = useState(true)
   const [confirm, setConfirm] = useState({ open: false, tx: null, mode: null })
   const [editTx, setEditTx] = useState(null)
+  const [editError, setEditError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -278,7 +305,17 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
     const { error } = await supabase.from('transactions').update(data).eq('id', id)
     if (error) throw error
     onRefresh()
-    setEditTx(null)
+  }
+
+  async function handleUpdateRecurringTotal(ruleId, newTotal) {
+    try {
+      await updateRecurringTotal(ruleId, newTotal)
+      onRefresh()
+      setEditTx(null)
+    } catch (err) {
+      setEditError(err.message || 'Erro ao ajustar repetições')
+      throw err
+    }
   }
 
   const filters = [
@@ -387,7 +424,7 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
                 <TxItem key={t.id} tx={t}
                   onDelete={tx => setConfirm({ open: true, tx, mode: 'delete' })}
                   onConfirm={tx => setConfirm({ open: true, tx, mode: 'confirm' })}
-                  onEdit={tx => setEditTx(tx)} />
+                  onEdit={tx => { setEditError(''); setEditTx(tx) }} />
               ))
           }
         </div>
@@ -407,7 +444,8 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
         <EditModal
           tx={editTx}
           onClose={() => setEditTx(null)}
-          onSave={handleEdit} />
+          onSave={handleEdit}
+          onUpdateRecurringTotal={handleUpdateRecurringTotal} />
       )}
     </>
   )

@@ -38,6 +38,18 @@ export function fmt(value) {
   }).format(Math.abs(value))
 }
 
+function pad2(n) { return String(n).padStart(2, '0') }
+
+export function addMonthsToDate(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00')
+  const day = d.getDate()
+  d.setDate(1)
+  d.setMonth(d.getMonth() + n)
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+  d.setDate(Math.min(day, lastDay))
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
 export async function getMonthTransactions(userId, year, month) {
   const start = `${year}-${String(month + 1).padStart(2, '0')}-01`
   let endYear = year
@@ -482,10 +494,7 @@ export async function getCardsWithAvailableLimit(userId) {
 }
 
 // ===== COMPRA NO CARTÃO (COM OU SEM PARCELAMENTO) =====
-// Cria N transações (uma por parcela), cada uma vinculada à fatura correta.
-// A 1ª parcela usa a data da compra; as demais caem no mesmo dia nos meses seguintes.
-// Status: a parcela cuja fatura já fechou/está em aberto no passado fica "realizado"
-// apenas se for a parcela atual; as futuras ficam "projetado".
+
 export async function createCardPurchase(userId, {
   cardId, amount, description, date, category, subcategory, installments
 }) {
@@ -498,7 +507,6 @@ export async function createCardPurchase(userId, {
 
   const total = installments || 1
   const installmentAmount = Math.round((amount / total) * 100) / 100
-  // Ajuste de centavos: a última parcela absorve a diferença de arredondamento
   const roundingDiff = Math.round((amount - installmentAmount * total) * 100) / 100
 
   const baseReferenceMonth = getInvoiceReferenceMonth(date, card.closing_day)
@@ -532,4 +540,95 @@ export async function createCardPurchase(userId, {
   const { data, error } = await supabase.from('transactions').insert(rows).select()
   if (error) throw error
   return data
+}
+
+// ===== SÉRIE RECORRENTE (ajuste de quantidade de meses) =====
+
+export async function getRecurringRule(ruleId) {
+  const { data, error } = await supabase
+    .from('recurring_rules')
+    .select('*')
+    .eq('id', ruleId)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getRecurringSeries(ruleId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('recurring_rule_id', ruleId)
+    .order('date_projected', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+// Ajusta o total de meses de uma série recorrente:
+// - Se aumentar: cria novas parcelas projetadas no final da série
+// - Se reduzir: remove parcelas futuras ainda não confirmadas (bloqueia se houver realizadas no intervalo removido)
+// Também atualiza installment_number/installment_total em toda a série
+export async function updateRecurringTotal(ruleId, newTotal) {
+  const rule = await getRecurringRule(ruleId)
+  const series = await getRecurringSeries(ruleId)
+
+  if (series.length === 0) throw new Error('Série recorrente não encontrada')
+
+  const firstDate = series[0].date_projected
+
+  if (newTotal < series.length) {
+    const toRemove = series.slice(newTotal)
+    const hasRealized = toRemove.some(t => t.status === 'realizado')
+    if (hasRealized) {
+      throw new Error('Não é possível reduzir: existem meses já confirmados além do novo total')
+    }
+    const idsToRemove = toRemove.map(t => t.id)
+    const { error: delError } = await supabase
+      .from('transactions')
+      .delete()
+      .in('id', idsToRemove)
+    if (delError) throw delError
+  }
+
+  if (newTotal > series.length) {
+    const base = series[0]
+    const newRows = []
+    for (let i = series.length; i < newTotal; i++) {
+      const occDate = addMonthsToDate(firstDate, i)
+      newRows.push({
+        user_id: base.user_id,
+        type: base.type,
+        status: 'projetado',
+        amount: base.amount,
+        description: base.description,
+        date_projected: occDate,
+        date_realized: null,
+        category: base.category,
+        subcategory: base.subcategory,
+        is_recurring: true,
+        recurring_rule_id: ruleId,
+        account_id: base.account_id || null,
+        installment_number: i + 1,
+        installment_total: newTotal,
+      })
+    }
+    if (newRows.length > 0) {
+      const { error: insError } = await supabase.from('transactions').insert(newRows)
+      if (insError) throw insError
+    }
+  }
+
+  const remaining = (await getRecurringSeries(ruleId)).slice(0, newTotal)
+  for (let i = 0; i < remaining.length; i++) {
+    await supabase
+      .from('transactions')
+      .update({ installment_number: i + 1, installment_total: newTotal })
+      .eq('id', remaining[i].id)
+  }
+
+  const { error: ruleError } = await supabase
+    .from('recurring_rules')
+    .update({ months_count: newTotal })
+    .eq('id', ruleId)
+  if (ruleError) throw ruleError
 }
