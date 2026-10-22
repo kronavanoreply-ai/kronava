@@ -43,6 +43,12 @@ function SaldoInicialModal({ current, onClose, onSave }) {
   )
 }
 
+function installmentLabel(tx) {
+  return tx.installment_total && tx.installment_total > 1
+    ? ` (${tx.installment_number}/${tx.installment_total})`
+    : ''
+}
+
 function TxItem({ tx }) {
   const label = tx.category || 'Outros'
   const initial = label.charAt(0).toUpperCase()
@@ -57,7 +63,7 @@ function TxItem({ tx }) {
         <div className="tx-desc">{tx.description || label}</div>
         <div className="tx-cat">{label}{tx.subcategory ? ` · ${tx.subcategory}` : ''}</div>
         <div className={`tx-status ${tx.status}`}>
-          {isProjected ? 'Projetado' : 'Realizado'}
+          {isProjected ? 'Projetado' : 'Realizado'}{installmentLabel(tx)}
         </div>
       </div>
       <div className="tx-right">
@@ -333,7 +339,7 @@ export default function Dashboard({
                 fontSize: 14, color: 'var(--ivory-dim)', marginTop: 10, fontWeight: 300
               }}>
                 <span style={{ textTransform: 'capitalize' }}>
-                  {t.description || label} <span style={{ opacity: 0.6 }}>· {dateStr}</span>
+                  {t.description || label}{installmentLabel(t)} <span style={{ opacity: 0.6 }}>· {dateStr}</span>
                 </span>
                 <span style={{
                   fontFamily: 'var(--font-mono)',
@@ -362,7 +368,7 @@ export default function Dashboard({
                 display: 'flex', justifyContent: 'space-between',
                 fontSize: 14, color: 'var(--ivory-dim)', marginTop: 10, fontWeight: 300
               }}>
-                <span style={{ textTransform: 'capitalize' }}>{t.description || label}</span>
+                <span style={{ textTransform: 'capitalize' }}>{t.description || label}{installmentLabel(t)}</span>
                 <span style={{
                   fontFamily: 'var(--font-mono)',
                   color: t.type === 'income' ? 'var(--green)' : 'var(--red)'
