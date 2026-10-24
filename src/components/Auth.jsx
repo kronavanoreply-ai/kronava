@@ -13,7 +13,7 @@ export default function Auth({ onAuth }) {
     setError('')
     if (!email || !password) { setError('Preencha todos os campos'); return }
     if (mode === 'register' && !name) { setError('Informe seu nome'); return }
-    if (password.length < 6) { setError('Senha deve ter no m├¡nimo 6 caracteres'); return }
+    if (password.length < 6) { setError('Senha deve ter no mínimo 6 caracteres'); return }
 
     setLoading(true)
     try {
@@ -33,7 +33,7 @@ export default function Auth({ onAuth }) {
   return (
     <div className="auth-screen">
       <div className="auth-logo">Kronava</div>
-      <div className="auth-tagline">Finan├ºas ┬À Agenda ┬À Tarefas</div>
+      <div className="auth-tagline">Finanças · Agenda · Tarefas</div>
 
       <div className="auth-card">
         <div className="auth-title">
@@ -56,7 +56,7 @@ export default function Auth({ onAuth }) {
 
         <div className="form-group">
           <label className="form-label">Senha</label>
-          <input className="form-input" type="password" placeholder="ÔÇóÔÇóÔÇóÔÇóÔÇóÔÇóÔÇóÔÇó"
+          <input className="form-input" type="password" placeholder="••••••••"
             value={password} onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
         </div>
@@ -69,11 +69,11 @@ export default function Auth({ onAuth }) {
 
         <div className="auth-switch">
           {mode === 'login' ? (
-            <>N├úo tem conta?{' '}
+            <>Não tem conta?{' '}
               <button onClick={() => { setMode('register'); setError('') }}>Criar conta</button>
             </>
           ) : (
-            <>J├í tem conta?{' '}
+            <>Já tem conta?{' '}
               <button onClick={() => { setMode('login'); setError('') }}>Entrar</button>
             </>
           )}
