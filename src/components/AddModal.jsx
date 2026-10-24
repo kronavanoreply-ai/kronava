@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, getCategories, getSubcategories } from '../data/categories.js'
-import { getAccounts, getCards } from '../store/supabase.js'
+import { getAccounts, getCards, getCustomCategories, addCustomCategory } from '../store/supabase.js'
 
 export default function AddModal({ userId, onClose, onSave }) {
   const [type, setType] = useState('expense')
@@ -21,8 +21,25 @@ export default function AddModal({ userId, onClose, onSave }) {
   const [cardId, setCardId] = useState('')
   const [installments, setInstallments] = useState(1)
 
-  const categories = getCategories(type)
-  const subcategories = category ? getSubcategories(type, category) : []
+  const [customCats, setCustomCats] = useState([])
+
+  const [showNewCat, setShowNewCat] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+
+  const [showNewSubcat, setShowNewSubcat] = useState(false)
+  const [newSubcatName, setNewSubcatName] = useState('')
+
+  const baseCategories = getCategories(type)
+  const customCatNames = customCats
+    .filter(c => c.type === type && !c.subcategory)
+    .map(c => c.category)
+  const categories = [...new Set([...baseCategories, ...customCatNames])]
+
+  const baseSubcategories = category ? getSubcategories(type, category) : []
+  const customSubcatNames = customCats
+    .filter(c => c.type === type && c.category === category && c.subcategory)
+    .map(c => c.subcategory)
+  const subcategories = [...new Set([...baseSubcategories, ...customSubcatNames])]
 
   useEffect(() => {
     if (!userId) return
@@ -34,15 +51,18 @@ export default function AddModal({ userId, onClose, onSave }) {
       setCards(cds)
       if (cds.length > 0) setCardId(cds[0].id)
     })
+    getCustomCategories(userId).then(setCustomCats).catch(() => {})
   }, [userId])
 
   function handleTypeChange(t) {
     setType(t); setCategory(''); setSubcategory(''); setError('')
+    setShowNewCat(false); setShowNewSubcat(false)
     if (t === 'income') setPaymentMethod('conta')
   }
 
   function handleCategoryChange(c) {
     setCategory(c); setSubcategory(''); setError('')
+    setShowNewSubcat(false)
   }
 
   function handlePaymentMethodChange(m) {
@@ -50,12 +70,44 @@ export default function AddModal({ userId, onClose, onSave }) {
     if (m === 'cartao') setIsRecurring(false)
   }
 
+  async function handleAddCategory() {
+    const name = newCatName.trim()
+    if (!name) return
+    try {
+      await addCustomCategory(userId, { type, category: name, subcategory: null })
+      const updated = await getCustomCategories(userId)
+      setCustomCats(updated)
+      setCategory(name)
+      setSubcategory('')
+      setNewCatName('')
+      setShowNewCat(false)
+      setError('')
+    } catch (err) {
+      setError(err.message || 'Erro ao criar categoria')
+    }
+  }
+
+  async function handleAddSubcategory() {
+    const name = newSubcatName.trim()
+    if (!name || !category) return
+    try {
+      await addCustomCategory(userId, { type, category, subcategory: name })
+      const updated = await getCustomCategories(userId)
+      setCustomCats(updated)
+      setSubcategory(name)
+      setNewSubcatName('')
+      setShowNewSubcat(false)
+      setError('')
+    } catch (err) {
+      setError(err.message || 'Erro ao criar subcategoria')
+    }
+  }
+
   async function handleSave() {
     const val = parseFloat(amount)
     if (!amount || val <= 0) { setError('Informe um valor válido'); return }
     if (!date) { setError('Informe a data'); return }
     if (!category) { setError('Selecione uma categoria'); return }
-    if (!subcategory) { setError('Selecione uma subcategoria'); return }
     if (isRecurring && (!months || months < 2 || months > 60)) {
       setError('Informe entre 2 e 60 meses'); return
     }
@@ -77,7 +129,7 @@ export default function AddModal({ userId, onClose, onSave }) {
         description: desc.trim(),
         date,
         category,
-        subcategory,
+        subcategory: subcategory || null,
         isRecurring,
         months: isRecurring ? months : 1,
         dayOfMonth,
@@ -199,12 +251,24 @@ export default function AddModal({ userId, onClose, onSave }) {
                 {c}
               </button>
             ))}
+            <button className="cat-option" onClick={() => setShowNewCat(!showNewCat)}>
+              + Nova categoria
+            </button>
           </div>
+
+          {showNewCat && (
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <input className="form-input" type="text" placeholder="Nome da categoria"
+                value={newCatName} onChange={e => setNewCatName(e.target.value)} />
+              <button className="submit-btn" style={{ width: 'auto', padding: '0 16px' }}
+                onClick={handleAddCategory}>Criar</button>
+            </div>
+          )}
         </div>
 
         {category && (
           <div className="form-group">
-            <label className="form-label">Subcategoria</label>
+            <label className="form-label">Subcategoria (opcional)</label>
             <div className="cat-grid">
               {subcategories.map(s => (
                 <button key={s}
@@ -213,7 +277,19 @@ export default function AddModal({ userId, onClose, onSave }) {
                   {s}
                 </button>
               ))}
+              <button className="cat-option" onClick={() => setShowNewSubcat(!showNewSubcat)}>
+                + Nova subcategoria
+              </button>
             </div>
+
+            {showNewSubcat && (
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <input className="form-input" type="text" placeholder="Nome da subcategoria"
+                  value={newSubcatName} onChange={e => setNewSubcatName(e.target.value)} />
+                <button className="submit-btn" style={{ width: 'auto', padding: '0 16px' }}
+                  onClick={handleAddSubcategory}>Criar</button>
+              </div>
+            )}
           </div>
         )}
 

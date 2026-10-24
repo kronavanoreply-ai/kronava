@@ -632,3 +632,37 @@ export async function updateRecurringTotal(ruleId, newTotal) {
     .eq('id', ruleId)
   if (ruleError) throw ruleError
 }
+
+// ===== CATEGORIAS PERSONALIZADAS DO USUÁRIO =====
+
+export async function getCustomCategories(userId) {
+  const { data, error } = await supabase
+    .from('custom_categories')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+export async function addCustomCategory(userId, { type, category, subcategory }) {
+  const { data, error } = await supabase
+    .from('custom_categories')
+    .insert([{
+      user_id: userId,
+      type,
+      category,
+      subcategory: subcategory || null,
+    }])
+    .select()
+  if (error) throw error
+  return data?.[0]
+}
+
+export async function deleteCustomCategory(id) {
+  const { error } = await supabase
+    .from('custom_categories')
+    .delete()
+    .eq('id', id)
+  if (error) throw error
+}
