@@ -309,11 +309,11 @@ export async function getAccountsWithBalances(userId) {
 }
 
 export const ACCOUNT_TYPES = [
-  { id: 'corrente', label: 'Conta Corrente', icon: '??' },
-  { id: 'poupanca', label: 'Poupança', icon: '??' },
-  { id: 'carteira', label: 'Carteira', icon: '??' },
-  { id: 'investimento', label: 'Investimento', icon: '??' },
-  { id: 'outro', label: 'Outro', icon: '??' },
+  { id: 'corrente', label: 'Conta Corrente', icon: '' },
+  { id: 'poupanca', label: 'Poupança', icon: '' },
+  { id: 'carteira', label: 'Carteira', icon: '' },
+  { id: 'investimento', label: 'Investimento', icon: '' },
+  { id: 'outro', label: 'Outro', icon: '' },
 ]
 
 // ===== CARTÕES DE CRÉDITO =====

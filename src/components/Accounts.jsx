@@ -5,6 +5,30 @@ import {
   fmt, ACCOUNT_TYPES
 } from '../store/supabase.js'
 
+function Monogram({ label, size = 36 }) {
+  const letter = (label || '?').trim().charAt(0).toUpperCase()
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: 'rgba(191,167,111,0.12)',
+        border: '1px solid rgba(191,167,111,0.4)',
+        color: 'var(--gold, #bfa76f)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 600,
+        fontSize: size * 0.42,
+        flexShrink: 0
+      }}
+    >
+      {letter}
+    </div>
+  )
+}
+
 function AccountModal({ userId, account, onClose, onSave }) {
   const [name, setName] = useState(account?.name || '')
   const [type, setType] = useState(account?.type || 'corrente')
@@ -55,8 +79,9 @@ function AccountModal({ userId, account, onClose, onSave }) {
               <button key={t.id}
                 className={`chip ${type === t.id ? 'active' : ''}`}
                 onClick={() => setType(t.id)}
-                style={{ padding: '8px 12px' }}>
-                {t.icon} {t.label}
+                style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Monogram label={t.label} size={18} />
+                {t.label}
               </button>
             ))}
           </div>
@@ -280,7 +305,7 @@ export default function Accounts({ userId, refresh, onRefresh }) {
           return (
             <div key={acc.id} className="plan-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 20 }}>{typeInfo?.icon || '📦'}</span>
+                <Monogram label={acc.name} />
                 <div>
                   <div style={{ fontWeight: 600 }}>{acc.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text3)' }}>{typeInfo?.label}</div>
