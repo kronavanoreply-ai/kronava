@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getMonthTransactions, calcRealized, fmt, MONTHS_FULL, supabase, updateRecurringTotal } from '../store/supabase.js'
+import { getMonthTransactions, calcRealized, fmt, MONTHS_FULL, supabase, updateRecurringTotal, getCards, payInvoice } from '../store/supabase.js'
 import { getCategories, getSubcategories } from '../data/categories.js'
 import Confirm from './Confirm.jsx'
 
@@ -167,6 +167,7 @@ function TxItem({ tx, onDelete, onConfirm, onEdit }) {
   const dateStr = `${d.getDate()}/${d.getMonth() + 1}`
   const isProjected = tx.status === 'projetado'
   const hasInstallments = tx.installment_total && tx.installment_total > 1
+  const isInvoiceGroup = !!tx.isInvoiceGroup
 
   return (
     <div className="tx-item">
@@ -177,9 +178,13 @@ function TxItem({ tx, onDelete, onConfirm, onEdit }) {
         <div className={`tx-status ${tx.status}`}>
           {isProjected
             ? <button onClick={() => onConfirm(tx)} style={{ background: 'none', border: 'none', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.05em' }}>
-                Projetado{hasInstallments ? ` (${tx.installment_number}/${tx.installment_total})` : ''} — toque para confirmar
+                {isInvoiceGroup
+                  ? 'Fatura em aberto — toque para pagar'
+                  : `Projetado${hasInstallments ? ` (${tx.installment_number}/${tx.installment_total})` : ''} — toque para confirmar`}
               </button>
-            : `Realizado${hasInstallments ? ` (${tx.installment_number}/${tx.installment_total})` : ''}`}
+            : isInvoiceGroup
+              ? 'Fatura paga'
+              : `Realizado${hasInstallments ? ` (${tx.installment_number}/${tx.installment_total})` : ''}`}
         </div>
       </div>
       <div className="tx-right">
@@ -188,20 +193,28 @@ function TxItem({ tx, onDelete, onConfirm, onEdit }) {
         </div>
         <div className="tx-date">{dateStr}</div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <button className="tx-delete" onClick={() => onEdit(tx)} aria-label="Editar">
-          <i className="ti ti-pencil" />
-        </button>
-        <button className="tx-delete" onClick={() => onDelete(tx)} aria-label="Remover">
-          <i className="ti ti-trash" />
-        </button>
-      </div>
+      {isInvoiceGroup ? (
+        <div style={{ fontSize: 10, color: 'var(--ivory-muted)', textAlign: 'right', maxWidth: 70 }}>
+          Gerenciar em Cartões
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <button className="tx-delete" onClick={() => onEdit(tx)} aria-label="Editar">
+            <i className="ti ti-pencil" />
+          </button>
+          <button className="tx-delete" onClick={() => onDelete(tx)} aria-label="Remover">
+            <i className="ti ti-trash" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
 export default function Transactions({ userId, month, year, changeMonth, refresh, onRefresh, onAddClick }) {
   const [txs, setTxs] = useState([])
+  const [cardsById, setCardsById] = useState({})
+  const [invoicesById, setInvoicesById] = useState({})
   const [filter, setFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -215,8 +228,29 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
     async function load() {
       setLoading(true)
       try {
-        const data = await getMonthTransactions(userId, year, month)
+        const [data, cards] = await Promise.all([
+          getMonthTransactions(userId, year, month),
+          getCards(userId),
+        ])
         setTxs(data)
+
+        const cardMap = {}
+        cards.forEach(c => { cardMap[c.id] = c })
+        setCardsById(cardMap)
+
+        const invoiceIds = [...new Set(data.filter(t => t.invoice_id).map(t => t.invoice_id))]
+        if (invoiceIds.length > 0) {
+          const { data: invoices, error } = await supabase
+            .from('invoices')
+            .select('*')
+            .in('id', invoiceIds)
+          if (error) throw error
+          const invMap = {}
+          invoices?.forEach(i => { invMap[i.id] = i })
+          setInvoicesById(invMap)
+        } else {
+          setInvoicesById({})
+        }
       } catch (err) {
         console.error(err)
       } finally {
@@ -229,21 +263,60 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
   const realized = calcRealized(txs)
   const balance = realized.inc - realized.exp
 
+  // Agrupa parcelas de cartão (mesma invoice_id) em uma única linha; mantém o restante como está
+  const groupedTxs = useMemo(() => {
+    const invoiceGroups = {}
+    const result = []
+
+    txs.forEach(t => {
+      if (t.invoice_id) {
+        if (!invoiceGroups[t.invoice_id]) invoiceGroups[t.invoice_id] = []
+        invoiceGroups[t.invoice_id].push(t)
+      } else {
+        result.push(t)
+      }
+    })
+
+    Object.entries(invoiceGroups).forEach(([invoiceId, items]) => {
+      const invoice = invoicesById[invoiceId]
+      const card = invoice ? cardsById[invoice.card_id] : null
+      const totalAmount = items.reduce((sum, i) => sum + parseFloat(i.amount), 0)
+      const status = invoice?.status === 'paid' ? 'realizado' : 'projetado'
+      const dueDate = invoice?.due_date || items[0].date_projected
+
+      result.push({
+        id: `invoice-${invoiceId}`,
+        isInvoiceGroup: true,
+        invoiceId,
+        invoice,
+        type: 'expense',
+        status,
+        amount: totalAmount,
+        description: `Fatura ${card?.name || 'Cartão'}`,
+        category: 'Cartão de crédito',
+        subcategory: card?.name || null,
+        date_projected: dueDate,
+      })
+    })
+
+    return result.sort((a, b) => new Date(b.date_projected) - new Date(a.date_projected))
+  }, [txs, invoicesById, cardsById])
+
   const availableCategories = useMemo(() => {
     const set = new Set()
-    txs.forEach(t => { if (t.category) set.add(t.category) })
+    groupedTxs.forEach(t => { if (t.category) set.add(t.category) })
     return Array.from(set).sort()
-  }, [txs])
+  }, [groupedTxs])
 
   const filtered = useMemo(() => {
     let result
 
     if (filter === 'all') {
-      result = txs
+      result = groupedTxs
     } else if (filter === 'projetado') {
-      result = txs.filter(t => t.status === 'projetado')
+      result = groupedTxs.filter(t => t.status === 'projetado')
     } else if (filter === 'realizado') {
-      result = txs.filter(t => t.status === 'realizado')
+      result = groupedTxs.filter(t => t.status === 'realizado')
     } else if (filter === 'semana') {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -251,13 +324,13 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
       in7.setDate(in7.getDate() + 7)
       const todayISO = toISODateFromDate(today)
       const in7ISO = toISODateFromDate(in7)
-      result = txs.filter(t =>
+      result = groupedTxs.filter(t =>
         t.status === 'projetado' &&
         t.date_projected >= todayISO &&
         t.date_projected <= in7ISO
       )
     } else {
-      result = txs.filter(t => t.type === filter)
+      result = groupedTxs.filter(t => t.type === filter)
     }
 
     if (categoryFilter !== 'all') {
@@ -272,7 +345,7 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
     }
 
     return result
-  }, [txs, filter, categoryFilter, dateFrom, dateTo])
+  }, [groupedTxs, filter, categoryFilter, dateFrom, dateTo])
 
   const hasActiveFilters = categoryFilter !== 'all' || dateFrom || dateTo
 
@@ -291,11 +364,16 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
   }
 
   async function handleConfirmProjected() {
-    const today = new Date().toISOString().split('T')[0]
+    const tx = confirm.tx
     try {
-      await supabase.from('transactions').update({
-        status: 'realizado', date_realized: today
-      }).eq('id', confirm.tx.id)
+      if (tx.isInvoiceGroup) {
+        await payInvoice(userId, tx.invoice, null)
+      } else {
+        const today = new Date().toISOString().split('T')[0]
+        await supabase.from('transactions').update({
+          status: 'realizado', date_realized: today
+        }).eq('id', tx.id)
+      }
       onRefresh()
     } catch (err) { console.error(err) }
     setConfirm({ open: false, tx: null, mode: null })
@@ -432,10 +510,12 @@ export default function Transactions({ userId, month, year, changeMonth, refresh
 
       <Confirm
         open={confirm.open}
-        title={confirm.mode === 'delete' ? 'Remover transação' : 'Confirmar lançamento'}
+        title={confirm.mode === 'delete' ? 'Remover transação' : (confirm.tx?.isInvoiceGroup ? 'Pagar fatura' : 'Confirmar lançamento')}
         message={confirm.mode === 'delete'
           ? 'Esta ação não pode ser desfeita.'
-          : `Confirmar "${confirm.tx?.description || 'este lançamento'}" como realizado?`}
+          : confirm.tx?.isInvoiceGroup
+            ? `Confirmar pagamento da "${confirm.tx?.description}" no valor de ${fmt(confirm.tx?.amount || 0)}?`
+            : `Confirmar "${confirm.tx?.description || 'este lançamento'}" como realizado?`}
         onConfirm={confirm.mode === 'delete' ? handleDelete : handleConfirmProjected}
         onCancel={() => setConfirm({ open: false, tx: null, mode: null })}
       />

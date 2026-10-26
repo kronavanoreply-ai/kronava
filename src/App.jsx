@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, createCardPurchase, addMonthsToDate } from './store/supabase.js'
+import { supabase, createCardPurchase, createCardSubscription, addMonthsToDate } from './store/supabase.js'
 import { getProfile } from './store/auth.js'
 import Auth from './components/Auth.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -71,6 +71,23 @@ export default function App() {
 
   async function handleSaveTx(tx) {
     const userId = session.user.id
+
+    // Fluxo de assinatura recorrente no cartão (indefinida)
+    if (tx.cardId && tx.isCardSubscription) {
+      await createCardSubscription(userId, {
+        cardId: tx.cardId,
+        amount: tx.amount,
+        description: tx.description,
+        date: tx.date,
+        category: tx.category,
+        subcategory: tx.subcategory,
+      })
+
+      doRefresh()
+      setShowAdd(false)
+      showToast('Assinatura cadastrada ✓')
+      return
+    }
 
     // Fluxo de compra no cartão de crédito (com ou sem parcelamento)
     if (tx.cardId) {

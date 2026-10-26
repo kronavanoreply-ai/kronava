@@ -542,6 +542,79 @@ export async function createCardPurchase(userId, {
   return data
 }
 
+// ===== ASSINATURA RECORRENTE NO CARTÃO (INDEFINIDA) =====
+
+export async function createCardSubscription(userId, {
+  cardId, amount, description, date, category, subcategory
+}) {
+  const { data: card, error: cardError } = await supabase
+    .from('cards')
+    .select('*')
+    .eq('id', cardId)
+    .single()
+  if (cardError) throw cardError
+
+  const { data: rule, error: ruleError } = await supabase
+    .from('recurring_rules')
+    .insert([{
+      user_id: userId,
+      type: 'expense',
+      amount,
+      description,
+      category,
+      subcategory,
+      day_of_month: new Date(date).getDate(),
+      active: true,
+      months_count: null,
+      card_id: cardId,
+    }])
+    .select()
+    .single()
+  if (ruleError) throw ruleError
+
+  const referenceMonth = getInvoiceReferenceMonth(date, card.closing_day)
+  const invoice = await getOrCreateInvoice(cardId, referenceMonth, card.closing_day, card.due_day)
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert([{
+      user_id: userId,
+      type: 'expense',
+      status: 'projetado',
+      amount,
+      description,
+      date_projected: invoice.due_date,
+      date_realized: null,
+      category,
+      subcategory,
+      is_recurring: true,
+      recurring_rule_id: rule.id,
+      card_id: cardId,
+      invoice_id: invoice.id,
+    }])
+    .select()
+  if (error) throw error
+  return data
+}
+
+// ===== EDITAR / EXCLUIR LANÇAMENTO DENTRO DA FATURA =====
+
+export async function updateInvoiceTransaction(transactionId, fields) {
+  const { error } = await supabase
+    .from('transactions')
+    .update(fields)
+    .eq('id', transactionId)
+  if (error) throw error
+}
+
+export async function deleteInvoiceTransaction(transactionId) {
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', transactionId)
+  if (error) throw error
+}
+
 // ===== SÉRIE RECORRENTE (ajuste de quantidade de meses) =====
 
 export async function getRecurringRule(ruleId) {

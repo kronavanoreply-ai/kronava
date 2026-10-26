@@ -20,6 +20,8 @@ export default function AddModal({ userId, onClose, onSave }) {
   const [cards, setCards] = useState([])
   const [cardId, setCardId] = useState('')
   const [installments, setInstallments] = useState(1)
+  const [isCardSubscription, setIsCardSubscription] = useState(false)
+  const [cardSubscription, setCardSubscription] = useState(false)
 
   const [customCats, setCustomCats] = useState([])
 
@@ -58,6 +60,8 @@ export default function AddModal({ userId, onClose, onSave }) {
     setType(t); setCategory(''); setSubcategory(''); setError('')
     setShowNewCat(false); setShowNewSubcat(false)
     if (t === 'income') setPaymentMethod('conta')
+    setIsCardSubscription(false)
+    setInstallments(1)
   }
 
   function handleCategoryChange(c) {
@@ -68,6 +72,7 @@ export default function AddModal({ userId, onClose, onSave }) {
   function handlePaymentMethodChange(m) {
     setPaymentMethod(m)
     if (m === 'cartao') setIsRecurring(false)
+    if (m === 'conta') setCardSubscription(false)
   }
 
   async function handleAddCategory() {
@@ -113,7 +118,7 @@ export default function AddModal({ userId, onClose, onSave }) {
     }
     if (paymentMethod === 'cartao') {
       if (!cardId) { setError('Selecione um cartão'); return }
-      if (!installments || installments < 1 || installments > 24) {
+      if (!cardSubscription && (!installments || installments < 1 || installments > 24)) {
         setError('Informe entre 1 e 24 parcelas'); return
       }
     }
@@ -135,7 +140,8 @@ export default function AddModal({ userId, onClose, onSave }) {
         dayOfMonth,
         accountId: paymentMethod === 'conta' ? (accountId || null) : null,
         cardId: paymentMethod === 'cartao' ? cardId : null,
-        installments: paymentMethod === 'cartao' ? installments : 1,
+        installments: paymentMethod === 'cartao' && !cardSubscription ? installments : 1,
+        isCardSubscription: paymentMethod === 'cartao' ? cardSubscription : false,
       })
     } catch (err) {
       setError(err.message || 'Erro ao salvar')
@@ -231,11 +237,26 @@ export default function AddModal({ userId, onClose, onSave }) {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Parcelas</label>
-                  <input className="form-input" type="number" min="1" max="24"
-                    value={installments}
-                    onChange={e => setInstallments(parseInt(e.target.value) || 1)} />
+                  <label className="form-label">Tipo de compra</label>
+                  <div className="status-toggle">
+                    <button className={`status-btn ${!cardSubscription ? 'active-proj' : ''}`}
+                      onClick={() => setCardSubscription(false)}>Compra / Parcelada</button>
+                    <button className={`status-btn ${cardSubscription ? 'active-real' : ''}`}
+                      onClick={() => setCardSubscription(true)}>Assinatura recorrente</button>
+                  </div>
                 </div>
+                {cardSubscription ? (
+                  <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+                    O valor informado será lançado todo mês nesta fatura, até você cancelar manualmente.
+                  </p>
+                ) : (
+                  <div className="form-group">
+                    <label className="form-label">Parcelas</label>
+                    <input className="form-input" type="number" min="1" max="24"
+                      value={installments}
+                      onChange={e => setInstallments(parseInt(e.target.value) || 1)} />
+                  </div>
+                )}
               </>
             )}
           </>
