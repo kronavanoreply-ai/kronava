@@ -426,23 +426,20 @@ export async function getCardInvoices(cardId) {
   return data || []
 }
 
-export async function getInvoiceTransactions(invoiceId) {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('invoice_id', invoiceId)
-    .order('date_projected', { ascending: false })
-  if (error) throw error
-  return data || []
-}
-
 export async function payInvoice(userId, invoice, accountId) {
+  const txs = await getInvoiceTransactions(invoice.id)
+  const totalAmount = txs.reduce((sum, t) => sum + parseFloat(t.amount), 0)
+
+  if (!totalAmount || totalAmount <= 0) {
+    throw new Error('Fatura sem lançamentos ou valor zerado.')
+  }
+
   const { error: txError } = await supabase
     .from('transactions')
     .insert([{
       user_id: userId,
       type: 'expense',
-      amount: invoice.total_amount,
+      amount: totalAmount,
       description: 'Pagamento de fatura',
       category: 'card_payment',
       status: 'realizado',
@@ -458,23 +455,6 @@ export async function payInvoice(userId, invoice, accountId) {
   if (invError) throw invError
 }
 
-export async function getCardsWithAvailableLimit(userId) {
-  const cards = await getCards(userId)
-  if (cards.length === 0) return []
-
-  const { data: txs, error } = await supabase
-    .from('transactions')
-    .select('amount, card_id, invoice_id')
-    .eq('user_id', userId)
-    .not('card_id', 'is', null)
-  if (error) throw error
-
-  const cardIds = cards.map(c => c.id)
-  const { data: invoices, error: invError } = await supabase
-    .from('invoices')
-    .select('id, status')
-    .in('card_id', cardIds)
-  if (invError) throw invError
 
   const paidInvoiceIds = new Set(invoices.filter(i => i.status === 'paid').map(i => i.id))
 
