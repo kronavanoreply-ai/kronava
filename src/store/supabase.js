@@ -40,14 +40,34 @@ export function fmt(value) {
 
 function pad2(n) { return String(n).padStart(2, '0') }
 
+// Converte 'YYYY-MM-DD' em data local (evita o bug de fuso UTC)
+function parseLocalDate(dateStr) {
+  const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function todayStr() {
+  return toDateStr(new Date())
+}
+
+// Monta 'YYYY-MM-DD' limitando o dia ao último dia do mês
+function safeDate(year, month1, day) {
+  const lastDay = new Date(year, month1, 0).getDate()
+  return `${year}-${pad2(month1)}-${pad2(Math.min(day, lastDay))}`
+}
+
 export function addMonthsToDate(dateStr, n) {
-  const d = new Date(dateStr + 'T00:00:00')
+  const d = parseLocalDate(dateStr)
   const day = d.getDate()
   d.setDate(1)
   d.setMonth(d.getMonth() + n)
   const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
   d.setDate(Math.min(day, lastDay))
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+  return toDateStr(d)
 }
 
 export async function getMonthTransactions(userId, year, month) {
@@ -249,7 +269,7 @@ export async function createTransfer(userId, { from_account_id, to_account_id, a
       to_account_id,
       amount,
       description: description || null,
-      date: date || new Date().toISOString().slice(0, 10)
+      date: date || todayStr()
     }])
     .select()
   if (error) throw error
@@ -360,12 +380,12 @@ export async function deleteCard(cardId) {
   if (error) throw error
 }
 
-// Calcula a data de referência (YYYY-MM) da fatura para uma data de compra
+// Referência (YYYY-MM) da fatura: até o fechamento = fatura do mês; depois = mês seguinte
 export function getInvoiceReferenceMonth(purchaseDate, closingDay) {
-  const d = new Date(purchaseDate)
+  const d = parseLocalDate(purchaseDate)
   const day = d.getDate()
   let year = d.getFullYear()
-  let month = d.getMonth() // 0-indexed
+  let month = d.getMonth()
 
   if (day > closingDay) {
     month += 1
@@ -374,14 +394,14 @@ export function getInvoiceReferenceMonth(purchaseDate, closingDay) {
   return monthKey(year, month)
 }
 
-// Soma n meses a uma referência "YYYY-MM", retornando nova referência "YYYY-MM"
+// Soma n meses a uma referência "YYYY-MM"
 export function addMonthsToReference(referenceMonth, n) {
-  const [year, month] = referenceMonth.split('-').map(Number) // month 1-indexed
+  const [year, month] = referenceMonth.split('-').map(Number)
   const d = new Date(year, month - 1 + n, 1)
   return monthKey(d.getFullYear(), d.getMonth())
 }
 
-// Garante que a fatura exista (cria se não existir) e retorna o id
+// Garante que a fatura exista (cria se não existir) e retorna o registro
 export async function getOrCreateInvoice(cardId, referenceMonth, closingDay, dueDay) {
   const { data: existing, error: findError } = await supabase
     .from('invoices')
@@ -393,13 +413,13 @@ export async function getOrCreateInvoice(cardId, referenceMonth, closingDay, due
   if (existing) return existing
 
   const [year, month] = referenceMonth.split('-').map(Number)
-  const closingDate = new Date(year, month - 1, closingDay).toISOString().slice(0, 10)
+  const closingDate = safeDate(year, month, closingDay)
   let dueYear = year, dueMonth = month
   if (dueDay < closingDay) {
     dueMonth += 1
     if (dueMonth > 12) { dueMonth = 1; dueYear += 1 }
   }
-  const dueDate = new Date(dueYear, dueMonth - 1, dueDay).toISOString().slice(0, 10)
+  const dueDate = safeDate(dueYear, dueMonth, dueDay)
 
   const { data, error } = await supabase
     .from('invoices')
@@ -453,7 +473,7 @@ export async function payInvoice(userId, invoice, accountId) {
       description: 'Pagamento de fatura',
       category: 'card_payment',
       status: 'realizado',
-      date_projected: new Date().toISOString().slice(0, 10),
+      date_projected: todayStr(),
       account_id: accountId || null
     }])
   if (txError) throw txError
@@ -537,6 +557,7 @@ export async function createCardPurchase(userId, {
       category,
       subcategory,
       is_recurring: false,
+      payment_method: 'card',
       card_id: cardId,
       invoice_id: invoice.id,
       installment_number: i + 1,
@@ -550,6 +571,52 @@ export async function createCardPurchase(userId, {
 }
 
 // ===== ASSINATURA RECORRENTE NO CARTÃO (INDEFINIDA) =====
+
+const SUBSCRIPTION_HORIZON = 12
+
+// Cria os lançamentos que faltam de startRef até 12 faturas à frente (sem duplicar)
+async function fillSubscription(rule, card, startRef) {
+  const currentRef = getInvoiceReferenceMonth(todayStr(), card.closing_day)
+  const endRef = addMonthsToReference(currentRef, SUBSCRIPTION_HORIZON - 1)
+
+  const { data: existing, error: exError } = await supabase
+    .from('transactions')
+    .select('invoice_id')
+    .eq('recurring_rule_id', rule.id)
+  if (exError) throw exError
+  const have = new Set((existing || []).map(t => t.invoice_id))
+
+  const rows = []
+  let ref = startRef
+  while (ref <= endRef) {
+    const invoice = await getOrCreateInvoice(card.id, ref, card.closing_day, card.due_day)
+    if (!have.has(invoice.id)) {
+      rows.push({
+        user_id: rule.user_id,
+        type: 'expense',
+        status: 'projetado',
+        amount: rule.amount,
+        description: rule.description,
+        date_projected: invoice.due_date,
+        date_realized: null,
+        category: rule.category,
+        subcategory: rule.subcategory,
+        is_recurring: true,
+        recurring_rule_id: rule.id,
+        payment_method: 'card',
+        card_id: card.id,
+        invoice_id: invoice.id,
+      })
+    }
+    ref = addMonthsToReference(ref, 1)
+  }
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('transactions').insert(rows)
+    if (error) throw error
+  }
+  return rows.length
+}
 
 export async function createCardSubscription(userId, {
   cardId, amount, description, date, category, subcategory
@@ -570,7 +637,7 @@ export async function createCardSubscription(userId, {
       description,
       category,
       subcategory,
-      day_of_month: new Date(date).getDate(),
+      day_of_month: parseLocalDate(date).getDate(),
       active: true,
       months_count: null,
       card_id: cardId,
@@ -579,29 +646,51 @@ export async function createCardSubscription(userId, {
     .single()
   if (ruleError) throw ruleError
 
-  const referenceMonth = getInvoiceReferenceMonth(date, card.closing_day)
-  const invoice = await getOrCreateInvoice(cardId, referenceMonth, card.closing_day, card.due_day)
+  const startRef = getInvoiceReferenceMonth(date, card.closing_day)
+  return fillSubscription(rule, card, startRef)
+}
 
-  const { data, error } = await supabase
-    .from('transactions')
-    .insert([{
-      user_id: userId,
-      type: 'expense',
-      status: 'projetado',
-      amount,
-      description,
-      date_projected: invoice.due_date,
-      date_realized: null,
-      category,
-      subcategory,
-      is_recurring: true,
-      recurring_rule_id: rule.id,
-      card_id: cardId,
-      invoice_id: invoice.id,
-    }])
-    .select()
+// Roda ao abrir o app: completa os meses futuros de todas as assinaturas ativas
+export async function syncCardSubscriptions(userId) {
+  const { data: rules, error } = await supabase
+    .from('recurring_rules')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('active', true)
+    .not('card_id', 'is', null)
   if (error) throw error
-  return data
+  if (!rules || rules.length === 0) return 0
+
+  const cards = await getCards(userId)
+  const cardMap = Object.fromEntries(cards.map(c => [c.id, c]))
+  let created = 0
+
+  for (const rule of rules) {
+    const card = cardMap[rule.card_id]
+    if (!card) continue
+
+    const { data: txs, error: txError } = await supabase
+      .from('transactions')
+      .select('invoice_id')
+      .eq('recurring_rule_id', rule.id)
+      .not('invoice_id', 'is', null)
+    if (txError) throw txError
+
+    let startRef = getInvoiceReferenceMonth(todayStr(), card.closing_day)
+    const invIds = (txs || []).map(t => t.invoice_id)
+    if (invIds.length > 0) {
+      const { data: invs, error: invError } = await supabase
+        .from('invoices')
+        .select('reference_month')
+        .in('id', invIds)
+      if (invError) throw invError
+      const refs = (invs || []).map(i => i.reference_month).sort()
+      if (refs.length > 0) startRef = refs[0]
+    }
+
+    created += await fillSubscription(rule, card, startRef)
+  }
+  return created
 }
 
 // ===== EDITAR / EXCLUIR LANÇAMENTO DENTRO DA FATURA =====
@@ -644,12 +733,8 @@ export async function getRecurringSeries(ruleId) {
   return data || []
 }
 
-// Ajusta o total de meses de uma série recorrente:
-// - Se aumentar: cria novas parcelas projetadas no final da série
-// - Se reduzir: remove parcelas futuras ainda não confirmadas (bloqueia se houver realizadas no intervalo removido)
-// Também atualiza installment_number/installment_total em toda a série
 export async function updateRecurringTotal(ruleId, newTotal) {
-  const rule = await getRecurringRule(ruleId)
+  await getRecurringRule(ruleId)
   const series = await getRecurringSeries(ruleId)
 
   if (series.length === 0) throw new Error('Série recorrente não encontrada')

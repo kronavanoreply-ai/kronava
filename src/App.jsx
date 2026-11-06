@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, createCardPurchase, createCardSubscription, addMonthsToDate } from './store/supabase.js'
+import { supabase, createCardPurchase, createCardSubscription, syncCardSubscriptions, addMonthsToDate } from './store/supabase.js'
 import { getProfile } from './store/auth.js'
 import Auth from './components/Auth.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -53,6 +53,11 @@ export default function App() {
     } finally {
       setLoading(false)
     }
+
+    // Completa os meses futuros das assinaturas de cartão (sem duplicar)
+    syncCardSubscriptions(userId)
+      .then(created => { if (created > 0) doRefresh() })
+      .catch(err => console.error('Erro ao sincronizar assinaturas:', err))
   }
 
   function changeMonth(dir) {
@@ -72,7 +77,6 @@ export default function App() {
   async function handleSaveTx(tx) {
     const userId = session.user.id
 
-    // Fluxo de assinatura recorrente no cartão (indefinida)
     if (tx.cardId && tx.isCardSubscription) {
       await createCardSubscription(userId, {
         cardId: tx.cardId,
@@ -89,7 +93,6 @@ export default function App() {
       return
     }
 
-    // Fluxo de compra no cartão de crédito (com ou sem parcelamento)
     if (tx.cardId) {
       const rows = await createCardPurchase(userId, {
         cardId: tx.cardId,
