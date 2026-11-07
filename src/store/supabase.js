@@ -401,15 +401,22 @@ export function addMonthsToReference(referenceMonth, n) {
   return monthKey(d.getFullYear(), d.getMonth())
 }
 
-// Garante que a fatura exista (cria se não existir) e retorna o registro
-export async function getOrCreateInvoice(cardId, referenceMonth, closingDay, dueDay) {
-  const { data: existing, error: findError } = await supabase
+async function findInvoice(cardId, referenceMonth) {
+  const { data, error } = await supabase
     .from('invoices')
     .select('*')
     .eq('card_id', cardId)
     .eq('reference_month', referenceMonth)
     .maybeSingle()
-  if (findError) throw findError
+  if (error) throw error
+  return data
+}
+
+// Garante que a fatura exista (cria se não existir) e retorna o registro.
+// Usa upsert com ignoreDuplicates: se outra chamada criar a mesma fatura ao mesmo tempo,
+// não dá 409 e não sobrescreve status (ex.: fatura já paga).
+export async function getOrCreateInvoice(cardId, referenceMonth, closingDay, dueDay) {
+  const existing = await findInvoice(cardId, referenceMonth)
   if (existing) return existing
 
   const [year, month] = referenceMonth.split('-').map(Number)
@@ -421,19 +428,21 @@ export async function getOrCreateInvoice(cardId, referenceMonth, closingDay, due
   }
   const dueDate = safeDate(dueYear, dueMonth, dueDay)
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('invoices')
-    .insert([{
+    .upsert([{
       card_id: cardId,
       reference_month: referenceMonth,
       closing_date: closingDate,
       due_date: dueDate,
       status: 'open',
       total_amount: 0
-    }])
-    .select()
+    }], { onConflict: 'card_id,reference_month', ignoreDuplicates: true })
   if (error) throw error
-  return data?.[0]
+
+  const invoice = await findInvoice(cardId, referenceMonth)
+  if (!invoice) throw new Error('Não foi possível criar a fatura ' + referenceMonth)
+  return invoice
 }
 
 export async function getCardInvoices(cardId) {
@@ -650,8 +659,7 @@ export async function createCardSubscription(userId, {
   return fillSubscription(rule, card, startRef)
 }
 
-// Roda ao abrir o app: completa os meses futuros de todas as assinaturas ativas
-export async function syncCardSubscriptions(userId) {
+async function runSyncCardSubscriptions(userId) {
   const { data: rules, error } = await supabase
     .from('recurring_rules')
     .select('*')
@@ -691,6 +699,16 @@ export async function syncCardSubscriptions(userId) {
     created += await fillSubscription(rule, card, startRef)
   }
   return created
+}
+
+// Trava: se o sync já estiver rodando, chamadas simultâneas reaproveitam a mesma execução
+let syncInFlight = null
+
+// Roda ao abrir o app: completa os meses futuros de todas as assinaturas ativas
+export async function syncCardSubscriptions(userId) {
+  if (syncInFlight) return syncInFlight
+  syncInFlight = runSyncCardSubscriptions(userId).finally(() => { syncInFlight = null })
+  return syncInFlight
 }
 
 // ===== EDITAR / EXCLUIR LANÇAMENTO DENTRO DA FATURA =====
